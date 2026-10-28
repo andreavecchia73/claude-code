@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Icona semplice: casa stilizzata con il colore accent del cruscotto -->
+    <path
+        android:fillColor="#1f6f5c"
+        android:pathData="M54,20 L88,50 L80,50 L80,86 L62,86 L62,66 L46,66 L46,86 L28,86 L28,50 L20,50 Z" />
+</vector>

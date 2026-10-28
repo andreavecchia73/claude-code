@@ -1,0 +1,642 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cruscotto Gestione Casa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: header con selettore Energia/Bollette/Gas/Costi e stato dati → controlli → riquadri → grafici progressivi → tabella mensile */
+:root {
+  --bg: #f6f7f5;
+  --surface: #fcfcfb;
+  --ink: #0f1412;
+  --ink-2: #4d5551;
+  --muted: #858c88;
+  --grid: #e2e5e1;
+  --axis: #c3c8c3;
+  --zero: #8f9792;
+  --border: rgba(15,20,18,0.10);
+  --accent: #1f6f5c;
+  --accent-ink: #ffffff;
+  --y0: #2a78d6;   /* anno corrente */
+  --y1: #eb6834;   /* anno -1 */
+  --y2: #1baf7a;   /* anno -2 */
+  --good: #006300;
+  --bad: #c62f2f;
+  --good-wash: rgba(12,163,12,0.10);
+  --bad-wash: rgba(208,59,59,0.10);
+  --warn-wash: rgba(250,178,25,0.18);
+  --font: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1110; --surface: #171b19; --ink: #f3f5f4; --ink-2: #c0c7c3; --muted: #8a918d;
+    --grid: #262c29; --axis: #39403c; --zero: #6b736e; --border: rgba(255,255,255,0.10); --accent: #5cc4a6; --accent-ink: #0e1110;
+    --y0: #3987e5; --y1: #d95926; --y2: #199e70;
+    --good: #2fbf2f; --bad: #f07a7a;
+    --good-wash: rgba(12,163,12,0.16); --bad-wash: rgba(230,103,103,0.16); --warn-wash: rgba(250,178,25,0.16);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1110; --surface: #171b19; --ink: #f3f5f4; --ink-2: #c0c7c3; --muted: #8a918d;
+  --grid: #262c29; --axis: #39403c; --zero: #6b736e; --border: rgba(255,255,255,0.10); --accent: #5cc4a6; --accent-ink: #0e1110;
+  --y0: #3987e5; --y1: #d95926; --y2: #199e70;
+  --good: #2fbf2f; --bad: #f07a7a;
+  --good-wash: rgba(12,163,12,0.16); --bad-wash: rgba(230,103,103,0.16); --warn-wash: rgba(250,178,25,0.16);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 24px 48px; display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end; justify-content: space-between; }
+h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.sub { margin: 4px 0 0; color: var(--ink-2); max-width: 70ch; }
+.status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.live .dot { background: var(--good); }
+.pill.warn .dot { background: #e0a000; }
+button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .55; cursor: default; }
+
+.tabs { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 3px; border-radius: 9px; background: var(--grid); justify-self: start; }
+.tabs button { border: none; background: transparent; padding: 7px 18px; font-size: 14px; font-weight: 600; color: var(--ink-2); border-radius: 7px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.tabs button:hover { border: none; color: var(--ink); }
+.tabs button[aria-selected="true"]:hover { color: var(--accent-ink); }
+
+.view { display: grid; gap: 22px; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; color: var(--ink-2); font-size: 13px; }
+.controls label { display: inline-flex; gap: 8px; align-items: center; }
+select { font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
+.msg { font-size: 13px; color: var(--ink-2); padding: 8px 12px; border-radius: 6px; background: var(--warn-wash); }
+.sect { margin: 6px 0 -8px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.grp { grid-column: 1 / -1; margin: 6px 0 -4px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.grp:first-child { margin-top: 0; }
+
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpis.solo { grid-template-columns: minmax(0, 440px); }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; min-width: 0; align-content: start; }
+.kpi.total { border-color: var(--axis); }
+.kpi.wide { grid-column: span 2; }
+.kpi h2 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-2); }
+.kpi .big { font-size: 32px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.kpi .big small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 4px; }
+.kpi .period { font-size: 12.5px; color: var(--muted); }
+.kpi .lag { font-size: 12px; color: var(--ink-2); background: var(--warn-wash); padding: 3px 8px; border-radius: 4px; justify-self: start; }
+.deltas { display: grid; gap: 6px; }
+.delta { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+.delta .vs { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.delta .abs { color: var(--muted); font-family: var(--mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 4px; justify-self: start; }
+.chip.good { color: var(--good); background: var(--good-wash); }
+.chip.bad { color: var(--bad); background: var(--bad-wash); }
+.chip.flat { color: var(--ink-2); background: var(--grid); }
+
+.charts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.charts.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.charts.solo { grid-template-columns: minmax(0, 1fr); }
+.chart { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 10px; min-width: 0; position: relative; }
+.chart.wide { grid-column: 1 / -1; }
+.chart h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+.chart .unit { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
+.legend i.dash { border-top-style: dashed; }
+.plot { position: relative; }
+.plot svg { display: block; width: 100%; height: auto; overflow: visible; }
+.plot text { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.plot .lbl { font-family: var(--font); font-size: 11.5px; font-weight: 600; fill: var(--ink); }
+.plot .zone { font-family: var(--font); font-size: 11px; fill: var(--ink-2); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 4px 14px rgba(0,0,0,.12); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; min-width: 170px; z-index: 2; }
+.tip b { display: block; margin-bottom: 4px; }
+.tip .r { display: grid; grid-template-columns: 10px 1fr auto; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+.tip .r i { width: 8px; height: 8px; border-radius: 50%; }
+.tip .d { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+
+.tablebox { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; display: grid; gap: 10px; }
+.tablehead { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.tablebox h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.tscroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { color: var(--ink-2); font-weight: 600; font-size: 12px; }
+thead tr.hg th { color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: none; padding-bottom: 0; }
+td.sep, th.sep { border-left: 1px solid var(--grid); }
+td.good { color: var(--good); } td.bad { color: var(--bad); }
+tr.cut td { background: var(--warn-wash); }
+.note { font-size: 12.5px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+@media (max-width: 1080px) { .charts.c4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 980px) { .charts { grid-template-columns: repeat(2, minmax(0,1fr)); } .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 680px) { .charts, .charts.c4, .kpis, .kpis.k4 { grid-template-columns: minmax(0,1fr); } .kpi.wide { grid-column: auto; } .wrap { padding-inline: 16px; } h1 { font-size: 22px; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Cruscotto gestione casa</h1>
+      <p class="sub">Valori cumulati da gennaio, anno in corso contro i due anni precedenti. Dati da copia salvata nell'app (foglio <em>GESTIONE CASA 2026</em>), non si aggiornano in automatico.</p>
+    </div>
+    <div class="status">
+      <span class="pill" id="srcPill"><span class="dot"></span><span id="srcText">Copia dei dati al 06/10/2026</span></span>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" aria-label="Scegli il cruscotto">
+    <button type="button" role="tab" id="tab-e" aria-controls="view-e" aria-selected="true">Energia</button>
+    <button type="button" role="tab" id="tab-b" aria-controls="view-b" aria-selected="false">Bollette</button>
+    <button type="button" role="tab" id="tab-g" aria-controls="view-g" aria-selected="false">Gas</button>
+    <button type="button" role="tab" id="tab-c" aria-controls="view-c" aria-selected="false">Costi</button>
+  </div>
+
+  <div class="msg" id="msg" hidden></div>
+
+  <section class="view" id="view-e" role="tabpanel" aria-labelledby="tab-e"></section>
+  <section class="view" id="view-b" role="tabpanel" aria-labelledby="tab-b" hidden></section>
+  <section class="view" id="view-g" role="tabpanel" aria-labelledby="tab-g" hidden></section>
+  <section class="view" id="view-c" role="tabpanel" aria-labelledby="tab-c" hidden></section>
+</div>
+
+<script>
+(function () {
+  const FILE_ID = "1dkVhjXs9Vs6jicZNINdsuMqHixoDat_cbIhdY2CqlnE";
+  const SNAP_DATE = "06/10/2026";
+  const MESI = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+  const MESI_L = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+  const $ = (id) => document.getElementById(id);
+  const nf0 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 });
+  const nf1 = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nf2 = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const eur0 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+  const eur2 = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const minus = (s) => s.replace(/^-/, "−");
+  const signed = (v, f) => (v >= 0 ? "+" : "−") + f.format(Math.abs(v));
+
+  // Copie di riserva (tab del foglio al 06/10/2026)
+  // CONSUMI ELETTRICI: [anno, mese, consumo TOT, prodotto, immesso, prelevato]
+  const SNAP_E = [[2022,1,510.47,100,19.18,429.65],[2022,2,563.72,151,21.95,434.68],[2022,3,635.26,246,46.78,436.04],[2022,4,537.39,309,119.17,347.56],[2022,5,461.24,319,158.63,300.87],[2022,6,435.98,341,166.56,261.54],[2022,7,423.13,395,215.93,244.06],[2022,8,463.91,338,164.18,290.09],[2022,9,403.18,246,118.59,275.77],[2022,10,385.33,186,81.38,280.7],[2022,11,521.73,95,16.58,443.31],[2022,12,512.96,50,3.28,466.24],[2023,1,461.9,73,16.55,405.45],[2023,2,455.43,150,43.46,348.89],[2023,3,473.78,244,106.73,336.5],[2023,4,454.13,289,133.08,298.21],[2023,5,393.27,273,142.25,262.52],[2023,6,390.41,339,181.24,232.65],[2023,7,546.31,365,155.6,336.91],[2023,8,516.8,315,150.85,352.66],[2023,9,430.87,248,109.21,292.08],[2023,10,446.88,167,66.62,346.5],[2023,11,560.35,129,31.6,462.95],[2023,12,573.69,92,15.64,497.33],[2024,1,482.46,105.45,33.91,410.91],[2024,2,523.59,124.29,21.55,420.85],[2024,3,543.37,186.18,65.32,422.5],[2024,4,469.96,270.31,126.3,325.95],[2024,5,397.81,305.1,161.52,254.23],[2024,6,439.31,325,159.95,274.25],[2024,7,526.17,362,172.5,336.67],[2024,8,518.76,314.24,131.74,336.26],[2024,9,456.35,212.64,89.11,332.82],[2024,10,482.08,99.39,28.18,410.86],[2024,11,588.05,101.82,12.68,498.91],[2024,12,513.85,92.88,19.78,440.76],[2025,1,522.28,77.86,9.05,453.46],[2025,2,523.56,97.14,16.8,443.22],[2025,3,623.17,208,40,455.17],[2025,4,530.62,374.9,87.52,243.25],[2025,5,586.5,751.25,202.05,37.3],[2025,6,560.4,945.85,398.36,12.91],[2025,7,599.8,875.54,298.45,22.71],[2025,8,540.45,783.8,265.66,22.3],[2025,9,550.56,601,117.25,66.81],[2025,10,556.6,471,45.99,131.6],[2025,11,630.57,298.03,2.52,335.06],[2025,12,626.4,189.01,0,437.39],[2026,1,544.46,169.44,0,375.02],[2026,2,570.9,315,6.36,262.26],[2026,3,631.19,523.4,66.2,174],[2026,4,525.55,710,242.78,58.33],[2026,5,588.38,864.17,302.15,26.37],[2026,6,678.8,931.1,262.86,10.55],[2026,7,735.95,907.43,214.21,42.73],[2026,8,692.79,805.6,187.29,74.48],[2026,9,627.04,658.05,128.35,97.34]];
+  // BOLLETTE: [anno, mese di competenza, servizio, importo €]
+  const SNAP_B = [[2022,1,"ACQUA",11.21],[2022,1,"AMBIENTE",31.93],[2022,1,"ENERGIA ELETTRICA",91.57],[2022,1,"GAS",368.15],[2022,1,"RAI",9],[2022,2,"ACQUA",19.26],[2022,2,"AMBIENTE",28.84],[2022,2,"ENERGIA ELETTRICA",88.44],[2022,2,"GAS",230.29],[2022,2,"RAI",9],[2022,3,"ACQUA",22.62],[2022,3,"AMBIENTE",31.93],[2022,3,"ENERGIA ELETTRICA",100.05],[2022,3,"GAS",133.47],[2022,3,"RAI",9],[2022,4,"ACQUA",13.21],[2022,4,"AMBIENTE",30.91],[2022,4,"ENERGIA ELETTRICA",86.74],[2022,4,"GAS",73.27],[2022,4,"RAI",9],[2022,5,"ACQUA",6.85],[2022,5,"AMBIENTE",29.02],[2022,5,"ENERGIA ELETTRICA",68.66],[2022,5,"GAS",24.57],[2022,5,"RAI",9],[2022,6,"ACQUA",23.47],[2022,6,"AMBIENTE",28.09],[2022,6,"ENERGIA ELETTRICA",57.78],[2022,6,"GAS",47.73],[2022,6,"RAI",9],[2022,7,"ACQUA",34.36],[2022,7,"AMBIENTE",29.02],[2022,7,"ENERGIA ELETTRICA",68.49],[2022,7,"GAS",-6.04],[2022,7,"RAI",9],[2022,8,"ACQUA",23.65],[2022,8,"AMBIENTE",29.02],[2022,8,"ENERGIA ELETTRICA",77.87],[2022,8,"GAS",-1.18],[2022,8,"RAI",9],[2022,9,"ACQUA",17.17],[2022,9,"AMBIENTE",30.76],[2022,9,"ENERGIA ELETTRICA",59.38],[2022,9,"GAS",15.04],[2022,9,"RAI",9],[2022,10,"ACQUA",17.22],[2022,10,"AMBIENTE",31.79],[2022,10,"ENERGIA ELETTRICA",84.14],[2022,10,"GAS",37.26],[2022,10,"RAI",9],[2022,11,"ACQUA",16.45],[2022,11,"AMBIENTE",30.76],[2022,11,"ENERGIA ELETTRICA",64.01],[2022,11,"GAS",78.59],[2022,12,"ACQUA",10.79],[2022,12,"AMBIENTE",27.76],[2022,12,"ENERGIA ELETTRICA",100.57],[2022,12,"GAS",148.02],[2023,1,"ACQUA",22.36],[2023,1,"AMBIENTE",32.25],[2023,1,"ENERGIA ELETTRICA",87.62],[2023,1,"GAS",179.8],[2023,1,"RAI",9],[2023,2,"ACQUA",19.73],[2023,2,"AMBIENTE",32.25],[2023,2,"ENERGIA ELETTRICA",80.37],[2023,2,"GAS",107.21],[2023,2,"RAI",9],[2023,3,"ACQUA",21.38],[2023,3,"AMBIENTE",32.25],[2023,3,"ENERGIA ELETTRICA",77.83],[2023,3,"GAS",49.99],[2023,3,"RAI",9],[2023,4,"ACQUA",12.27],[2023,4,"AMBIENTE",32.24],[2023,4,"ENERGIA ELETTRICA",75.47],[2023,4,"GAS",24.21],[2023,4,"RAI",9],[2023,5,"ACQUA",17.69],[2023,5,"AMBIENTE",33.32],[2023,5,"ENERGIA ELETTRICA",77.98],[2023,5,"GAS",23.37],[2023,5,"RAI",9],[2023,6,"ACQUA",39.24],[2023,6,"AMBIENTE",32.24],[2023,6,"ENERGIA ELETTRICA",76.27],[2023,6,"GAS",15.09],[2023,6,"RAI",9],[2023,7,"ACQUA",40.42],[2023,7,"AMBIENTE",33.32],[2023,7,"ENERGIA ELETTRICA",78.82],[2023,7,"GAS",15.17],[2023,7,"RAI",9],[2023,8,"ACQUA",40.33],[2023,8,"AMBIENTE",33.32],[2023,8,"ENERGIA ELETTRICA",93.09],[2023,8,"GAS",13.31],[2023,8,"RAI",9],[2023,9,"ACQUA",38.97],[2023,9,"AMBIENTE",32.24],[2023,9,"ENERGIA ELETTRICA",77],[2023,9,"GAS",13.31],[2023,9,"RAI",9],[2023,10,"ACQUA",30.36],[2023,10,"AMBIENTE",33.31],[2023,10,"ENERGIA ELETTRICA",102.12],[2023,10,"GAS",46.03],[2023,10,"RAI",9],[2023,11,"ACQUA",23.31],[2023,11,"AMBIENTE",32.24],[2023,11,"ENERGIA ELETTRICA",98.83],[2023,11,"GAS",44.54],[2023,12,"ACQUA",49.63],[2023,12,"AMBIENTE",33.31],[2023,12,"ENERGIA ELETTRICA",119.02],[2023,12,"GAS",140.64],[2024,1,"ACQUA",24.75],[2024,1,"AMBIENTE",34],[2024,1,"ENERGIA ELETTRICA",106.16],[2024,1,"GAS",145.47],[2024,1,"RAI",7],[2024,2,"ACQUA",13.71],[2024,2,"AMBIENTE",31.81],[2024,2,"ENERGIA ELETTRICA",108.84],[2024,2,"GAS",92.52],[2024,2,"RAI",7],[2024,3,"ACQUA",6.46],[2024,3,"AMBIENTE",34],[2024,3,"ENERGIA ELETTRICA",108.83],[2024,3,"GAS",46.26],[2024,3,"RAI",7],[2024,4,"ACQUA",20.35],[2024,4,"AMBIENTE",32.92],[2024,4,"ENERGIA ELETTRICA",96.81],[2024,4,"GAS",39.61],[2024,4,"RAI",7],[2024,5,"ACQUA",23.95],[2024,5,"AMBIENTE",34.14],[2024,5,"ENERGIA ELETTRICA",75.49],[2024,5,"GAS",7.92],[2024,5,"RAI",7],[2024,6,"ACQUA",25.11],[2024,6,"AMBIENTE",33.04],[2024,6,"ENERGIA ELETTRICA",90.89],[2024,6,"GAS",16.67],[2024,6,"RAI",7],[2024,7,"ACQUA",26.8],[2024,7,"AMBIENTE",34.15],[2024,7,"ENERGIA ELETTRICA",129.15],[2024,7,"GAS",17.22],[2024,7,"RAI",7],[2024,8,"ACQUA",27.74],[2024,8,"AMBIENTE",34.15],[2024,8,"ENERGIA ELETTRICA",99.64],[2024,8,"GAS",16.79],[2024,8,"RAI",7],[2024,9,"ACQUA",27.51],[2024,9,"AMBIENTE",33.03],[2024,9,"ENERGIA ELETTRICA",114.14],[2024,9,"GAS",16.24],[2024,9,"RAI",7],[2024,10,"ACQUA",15.66],[2024,10,"AMBIENTE",34.13],[2024,10,"ENERGIA ELETTRICA",133.27],[2024,10,"GAS",6.53],[2024,10,"RAI",7],[2024,11,"ACQUA",8.35],[2024,11,"AMBIENTE",33.03],[2024,11,"ENERGIA ELETTRICA",162.11],[2024,11,"GAS",81.15],[2024,12,"ACQUA",61.31],[2024,12,"AMBIENTE",34.14],[2024,12,"ENERGIA ELETTRICA",152.42],[2024,12,"GAS",194.86],[2025,1,"ENERGIA ELETTRICA",156.22],[2025,1,"GAS",192.41],[2025,1,"RAI",9],[2025,2,"ENERGIA ELETTRICA",160.78],[2025,2,"RAI",9],[2025,1,"ACQUA",24.96],[2025,2,"ACQUA",10.46],[2025,3,"AMBIENTE",99.27],[2025,3,"ENERGIA ELETTRICA",165.12],[2025,3,"GAS",173.64],[2025,3,"RAI",9],[2025,4,"ACQUA",45.35],[2025,4,"AMBIENTE",33.08],[2025,4,"ENERGIA ELETTRICA",87.77],[2025,4,"GAS",25.25],[2025,4,"RAI",9],[2025,5,"AMBIENTE",34.18],[2025,5,"ENERGIA ELETTRICA",30.24],[2025,5,"GAS",19.83],[2025,5,"RAI",9],[2025,6,"ACQUA",61.25],[2025,6,"AMBIENTE",33.95],[2025,6,"ENERGIA ELETTRICA",21.56],[2025,6,"GAS",13.7],[2025,6,"RAI",9],[2025,7,"ACQUA",24.95],[2025,7,"AMBIENTE",35.08],[2025,7,"ENERGIA ELETTRICA",38.54],[2025,7,"GAS",19.23],[2025,7,"RAI",9],[2025,8,"ACQUA",24.34],[2025,8,"AMBIENTE",35.08],[2025,8,"ENERGIA ELETTRICA",30.6],[2025,8,"GAS",19.23],[2025,8,"RAI",9],[2025,9,"ACQUA",23.13],[2025,9,"AMBIENTE",33.94],[2025,9,"ENERGIA ELETTRICA",43.8],[2025,9,"GAS",19.47],[2025,9,"RAI",9],[2025,10,"ACQUA",10.02],[2025,10,"AMBIENTE",35.08],[2025,10,"ENERGIA ELETTRICA",59.18],[2025,10,"GAS",25.24],[2025,10,"RAI",9],[2025,11,"ACQUA",86.49],[2025,11,"AMBIENTE",33.94],[2025,11,"ENERGIA ELETTRICA",114.65],[2025,11,"GAS",93.77],[2025,12,"ACQUA",40.12],[2025,12,"AMBIENTE",74.51],[2025,12,"ENERGIA ELETTRICA",157.9],[2025,12,"GAS",128.72],[2026,1,"AMBIENTE",70.15],[2026,1,"ENERGIA ELETTRICA",138.97],[2026,1,"GAS",180.9],[2026,1,"RAI",9],[2026,1,"ACQUA",25.09],[2026,2,"ACQUA",22.84],[2026,2,"ENERGIA ELETTRICA",98.71],[2026,2,"GAS",111.53],[2026,2,"RAI",9],[2026,3,"ENERGIA ELETTRICA",76.54],[2026,3,"GAS",90.1],[2026,3,"RAI",9],[2026,3,"ACQUA",25.46],[2026,4,"ACQUA",11.49],[2026,4,"ENERGIA ELETTRICA",33.46],[2026,4,"RAI",9],[2026,4,"GAS",30.35],[2026,5,"ENERGIA ELETTRICA",27.16],[2026,5,"RAI",9],[2026,4,"AMBIENTE",33.95],[2026,5,"AMBIENTE",35.07],[2026,5,"GAS",21.06],[2026,6,"ACQUA",75.35],[2026,6,"GAS",18.02],[2026,6,"ENERGIA ELETTRICA",24.08],[2026,6,"RAI",9],[2026,7,"ENERGIA ELETTRICA",32.04],[2026,7,"RAI",9],[2026,6,"AMBIENTE",33.39],[2026,7,"AMBIENTE",34.49],[2026,7,"GAS",20.08],[2026,7,"ACQUA",25.09],[2026,8,"ACQUA",10.52],[2026,8,"ENERGIA ELETTRICA",37.28],[2026,8,"RAI",9],[2026,8,"GAS",16.29]];
+  // Letture gas: [data lettura (seriale foglio), lettura contatore, consumo mensile Smc]
+  const SNAP_G = [[44379,2,2],[44469,10,8],[44501,62,52],[44531,177,115],[44563,426,249],[44595,667,241],[44621,777,110],[44652,865,88],[44682,893,28],[44713,897,4],[44744,898,1],[44805,899,1],[44835,901,2],[44866,903,2],[44896,948,45],[44928,1045,97],[44958,1160,115],[44986,1262,102],[45016,1308,46],[45046,1327,19],[45077,1329,2],[45107,1331,2],[45138,1332,1],[45169,1333,1],[45199,1334,1],[45230,1337,3],[45260,1392,55],[45291,1506,114],[45322,1660,154],[45351,1734,74],[45382,1771,37],[45412,1786,15],[45443,1789,3],[45473,1791,2],[45504,1792,1],[45534,1792,0],[45565,1794,2],[45595,1798,4],[45626,1865,67],[45657,2022,157],[45688,2176,119],[45716,2250,109],[45747,2292,42],[45777,2302,10],[45808,2305,3],[45838,2306,1],[45869,2308,2],[45900,2310,2],[45930,2313,3],[45961,2321,8],[45991,2394,73],[46022,2509,115],[46053,2677,168],[46081,2757,80],[46112,2817,60],[46142,2835,18],[46173,2843,8],[46203,2848,5],[46234,2855,7],[46265,2858,3],[46295,2865,7]];
+  // BOLLETTE luce (L) e gas (G) per mese di competenza: [anno, mese, servizio, importo €, consumo in bolletta, quota fissa €, quota variabile €]
+  const SNAP_C = [[2022,1,"L",91.57,444,null,null],[2022,1,"G",368.15,231,null,null],[2022,2,"L",88.44,413.83,null,null],[2022,2,"G",230.29,128,null,null],[2022,3,"L",100.05,458.17,null,null],[2022,3,"G",133.47,90,null,null],[2022,4,"L",86.74,411.69,null,null],[2022,4,"G",73.27,29,null,null],[2022,5,"L",68.66,329.31,null,null],[2022,5,"G",24.57,3,null,null],[2022,6,"L",57.78,249,null,null],[2022,6,"G",47.73,21.87,null,null],[2022,7,"L",68.49,257,null,null],[2022,7,"G",-6.04,-10.83,null,null],[2022,8,"L",77.87,317.62,null,null],[2022,8,"G",-1.18,-8.04,null,null],[2022,9,"L",59.38,247.38,null,null],[2022,9,"G",15.04,1,null,null],[2022,10,"L",84.14,408.89,null,null],[2022,10,"G",37.26,12.23,null,null],[2022,11,"L",64.01,323.11,null,null],[2022,11,"G",78.59,34.62,null,null],[2022,12,"L",100.57,466,null,null],[2022,12,"G",148.02,94.15,null,null],[2023,1,"L",87.62,406,null,null],[2023,1,"G",179.8,115,null,null],[2023,2,"L",80.37,348,null,null],[2023,2,"G",107.21,103,null,null],[2023,3,"L",77.83,337,null,null],[2023,3,"G",49.99,49,null,null],[2023,4,"L",75.47,298,null,null],[2023,4,"G",24.21,19,null,null],[2023,5,"L",77.98,263,null,null],[2023,5,"G",23.37,2,null,null],[2023,6,"L",76.27,279.84,null,null],[2023,6,"G",15.09,2,null,null],[2023,7,"L",78.82,289.16,null,null],[2023,7,"G",15.17,1,null,null],[2023,8,"L",93.09,353,null,null],[2023,8,"G",13.31,1,null,null],[2023,9,"L",77,292,null,null],[2023,9,"G",13.31,1,null,null],[2023,10,"L",102.12,347,null,null],[2023,10,"G",46.03,3,null,null],[2023,11,"L",98.83,463,null,null],[2023,11,"G",44.54,55,null,null],[2023,12,"L",119.02,496,null,null],[2023,12,"G",140.64,114,null,null],[2024,1,"L",106.16,412,null,null],[2024,1,"G",145.47,154,null,null],[2024,2,"L",108.84,421,null,null],[2024,2,"G",92.52,74,null,null],[2024,3,"L",108.83,421,null,null],[2024,3,"G",46.26,37,null,null],[2024,4,"L",96.81,327,null,null],[2024,4,"G",39.61,15,null,null],[2024,5,"L",75.49,255,null,null],[2024,5,"G",7.92,3,null,null],[2024,6,"L",90.89,273,null,null],[2024,6,"G",16.67,2,null,null],[2024,7,"L",129.15,385,null,null],[2024,7,"G",17.22,1,null,null],[2024,8,"L",99.64,290.55,null,null],[2024,8,"G",16.79,0,null,null],[2024,9,"L",114.14,332.82,null,null],[2024,9,"G",16.24,2,null,null],[2024,10,"L",133.27,410.13,null,null],[2024,10,"G",6.53,4,null,null],[2024,11,"L",162.11,498.91,null,null],[2024,11,"G",81.15,67,null,null],[2024,12,"L",152.42,440.76,null,null],[2024,12,"G",194.86,157,null,null],[2025,1,"L",156.22,453.46,24.2,132.02],[2025,1,"G",192.41,154,6,186.41],[2025,2,"L",160.78,443.22,20,140.78],[2025,3,"L",165.12,455.17,20,145.12],[2025,3,"G",173.64,116,30,143.64],[2025,4,"L",87.77,243.25,30.37,57.4],[2025,4,"G",25.25,10,17.5,7.75],[2025,5,"L",30.24,243.92,30.37,-0.13],[2025,5,"G",19.83,3,17.5,2.33],[2025,6,"L",21.56,12.91,12.11,9.45],[2025,6,"G",13.7,1,12.9,0.8],[2025,7,"L",38.54,23.07,21.64,16.9],[2025,7,"G",19.23,2,17.52,1.71],[2025,8,"L",30.6,22.3,24,6.6],[2025,8,"G",19.23,2,17.52,1.71],[2025,9,"L",43.8,66.8,24,19.8],[2025,9,"G",19.47,3,16.9,2.57],[2025,10,"L",59.18,131.6,25.45,33.73],[2025,10,"G",25.24,8,16.81,8.43],[2025,11,"L",114.65,335.06,25.45,89.2],[2025,11,"G",93.77,73,16.81,76.96],[2025,12,"L",157.9,437.39,25.04,132.86],[2025,12,"G",128.72,115,15.47,113.25],[2026,1,"L",138.97,375.02,25.03,113.94],[2026,1,"G",180.9,168,15.46,165.44],[2026,2,"L",98.71,262.26,24.92,73.79],[2026,2,"G",111.53,80,18.07,93.46],[2026,3,"L",76.54,174,27.58,48.96],[2026,3,"G",90.1,60,20,70.1],[2026,4,"L",33.46,57,21.76,11.7],[2026,4,"G",30.35,18,14.61,15.74],[2026,5,"L",27.16,26,22.29,4.87],[2026,5,"G",21.06,8,14.27,6.79],[2026,6,"G",18.02,5,13.9,4.12],[2026,6,"L",24.08,11,22.01,2.07],[2026,7,"L",32.04,44,22.53,9.51],[2026,7,"G",20.08,7,14.2,5.88],[2026,8,"L",37.28,80,22.88,14.4],[2026,8,"G",16.29,3,13.84,2.45]];
+
+  // ——— Vista Energia ———
+  const E_METRICS = [
+    { key: "netto", label: "Consumo netto", higherIsGood: false, signed: true, wide: true },
+    { key: "consumo", label: "Consumo totale", higherIsGood: false },
+    { key: "prodotto", label: "Prodotto fotovoltaico", higherIsGood: true },
+    { key: "immesso", label: "Immesso in rete", higherIsGood: true },
+    { key: "prelevato", label: "Prelevato dalla rete", higherIsGood: false },
+    { key: "autoconsumo", label: "Autoconsumo", higherIsGood: true },
+    { key: "autonomia", label: "Autonomia", higherIsGood: true, ratio: ["prodotto", "consumo"] }
+  ];
+  const energy = {
+    id: "e", data: {}, year: null, month: null, tbl: "netto",
+    tableLabel: "Indicatore", kpiClass: "k4",
+    note: "Consumo netto = prelevato − immesso: sopra lo zero prelevi dalla rete più energia di quanta ne immetti, sotto lo zero ne immetti di più. Lo scostamento % del consumo netto è calcolato sul valore assoluto dell'anno di confronto, così il segno indica sempre se è salito o sceso. Consumo totale = autoconsumo + prelevato. Autoconsumo = prodotto − immesso. Autonomia = prodotto ÷ consumo totale, come nella tab ANALISI: può superare il 100% nei mesi estivi; il suo scostamento è in punti percentuali (p.p.). Verde indica un andamento favorevole: meno consumo, meno prelievo e consumo netto più basso, più produzione, immissione, autoconsumo e autonomia. Il mese in corso entra quando il foglio ne riporta il totale.",
+    load(rows) {
+      const by = {};
+      for (const [y, m, c, p, i, pr, ac] of rows) {
+        if (!y || !m || c == null || isNaN(c)) continue;
+        const prod = +p || 0, imm = +i || 0;
+        const prel = pr != null && !isNaN(pr) ? +pr : Math.max(0, +c - (prod - imm));
+        (by[y] = by[y] || {})[m] = {
+          consumo: +c, prodotto: prod, immesso: imm, prelevato: prel, netto: prel - imm,
+          autoconsumo: ac != null && !isNaN(ac) ? +ac : prod - imm
+        };
+      }
+      this.data = by;
+    },
+    metrics() { return E_METRICS; },
+    lastMonth(y) { const ym = this.data[y] || {}; let m = 0; while (ym[m + 1]) m++; return m; },
+    years() { return Object.keys(this.data).map(Number).filter((y) => this.lastMonth(y) > 0 && this.data[y - 1] && this.data[y - 2]).sort((a, b) => b - a); },
+    cum(y, key) { const out = []; let s = 0; const ym = this.data[y] || {}; for (let m = 1; m <= 12; m++) { if (!ym[m]) break; s += ym[m][key]; out.push(s); } return out; },
+    series(mt, y) {
+      if (!mt.ratio) return this.cum(y, mt.key);
+      const a = this.cum(y, mt.ratio[0]), b = this.cum(y, mt.ratio[1]);
+      return a.map((v, j) => (b[j] ? v / b[j] * 100 : null));
+    },
+    big(mt, v) { return v == null ? "–" : mt.ratio ? `${nf1.format(v)}<small>%</small>` : `${minus(nf0.format(v))}<small>kWh</small>`; },
+    val(mt, v) { return v == null ? "–" : mt.ratio ? nf1.format(v) + "%" : minus(nf0.format(v)) + " kWh"; },
+    cell(mt, v) { return v == null ? "–" : mt.ratio ? nf1.format(v) + "%" : minus(nf0.format(v)); },
+    tick(mt, v) { return mt.ratio ? nf0.format(v) + "%" : minus(nf0.format(v)); },
+    endLabel(mt, v) { return mt.ratio ? nf1.format(v) + "%" : minus(nf0.format(v)); },
+    abs(mt, cur, ref, ry) { return mt.ratio ? `${ry}: ${nf1.format(ref)}%` : signed(cur - ref, nf0) + " kWh"; },
+    unit(mt) { return mt.ratio ? "Prodotto ÷ consumo totale, cumulati da gennaio" : mt.signed ? "Prelevato − immesso, kWh cumulati da gennaio" : "kWh cumulati da gennaio"; },
+    zones(mt) { return mt.signed ? ["prelevi più di quanto immetti", "immetti più di quanto prelevi"] : null; },
+    extra(mt, Y, M) {
+      if (mt.key !== "netto") return "";
+      const p = this.cum(Y, "prelevato")[M - 1], i = this.cum(Y, "immesso")[M - 1];
+      return p == null ? "" : `<div class="period">Prelevato ${nf0.format(p)} kWh − immesso ${nf0.format(i)} kWh</div>`;
+    },
+    tableTitle(mt) { return `${mt.label}: progressivo mese per mese${mt.ratio ? "" : " (kWh)"}`; },
+    delta(mt, cur, ref) {
+      if (cur == null || ref == null || !ref) return null;
+      if (mt.ratio) return { v: cur - ref, unit: " p.p." };
+      return { v: (cur - ref) / (mt.signed ? Math.abs(ref) : ref) * 100, unit: "%" };
+    },
+    lag() { return ""; },
+    single: null
+  };
+
+  // ——— Vista Bollette ———
+  const B_KNOWN = [
+    { key: "GAS", label: "Gas" },
+    { key: "ENERGIA ELETTRICA", label: "Energia elettrica" },
+    { key: "ACQUA", label: "Acqua" },
+    { key: "AMBIENTE", label: "Ambiente (rifiuti)" },
+    { key: "RAI", label: "Canone RAI" }
+  ];
+  const B_TOTAL = { key: "__TOT__", label: "Totale bollette", total: true, higherIsGood: false };
+  const bills = {
+    id: "b", data: {}, services: [], year: null, month: null, tbl: "__TOT__",
+    tableLabel: "Servizio",
+    note: "Gli importi sono attribuiti al mese di competenza della bolletta (colonne ANNO e MESE CIFRE), non alla data di emissione. Note di credito e conguagli negativi riducono il totale del mese. Lo scostamento confronta la spesa cumulata allo stesso mese: in verde se spendi meno, in rosso se spendi di più. Se un servizio non ha ancora bollette fino al mese di confronto, il riquadro lo segnala: il confronto per quel servizio risulta più basso del reale finché la bolletta non arriva.",
+    load(rows) {
+      const data = {}; const seen = new Set();
+      for (const [y, m, s, v] of rows) {
+        if (!y || !m || !s || v == null || isNaN(v)) continue;
+        const k = String(s).trim().toUpperCase(); seen.add(k);
+        const d = ((data[k] = data[k] || {})[y] = data[k][y] || {});
+        d[m] = (d[m] || 0) + +v;
+      }
+      this.data = data;
+      this.services = B_KNOWN.filter((x) => seen.has(x.key)).concat([...seen].filter((k) => !B_KNOWN.some((x) => x.key === k)).sort().map((k) => ({ key: k, label: k.charAt(0) + k.slice(1).toLowerCase() })))
+        .map((s) => Object.assign({ higherIsGood: false }, s));
+    },
+    metrics() { return [B_TOTAL, ...this.services]; },
+    keysOf(mt) { return mt.total ? this.services.map((s) => s.key) : [mt.key]; },
+    monthVal(mt, y, m) { let s = 0; for (const k of this.keysOf(mt)) { const v = this.data[k] && this.data[k][y] && this.data[k][y][m]; if (v != null) s += v; } return s; },
+    lastSvc(k, y) { const d = this.data[k] && this.data[k][y]; return d ? Math.max(0, ...Object.keys(d).map(Number)) : 0; },
+    lastMonth(y) { return Math.max(0, ...this.services.map((s) => this.lastSvc(s.key, y))); },
+    years() {
+      const all = new Set(); this.services.forEach((s) => Object.keys(this.data[s.key] || {}).forEach((y) => all.add(+y)));
+      return [...all].filter((y) => all.has(y - 1) && all.has(y - 2) && this.lastMonth(y) > 0).sort((a, b) => b - a);
+    },
+    series(mt, y) { const lm = this.lastMonth(y); const out = []; let s = 0; for (let m = 1; m <= lm; m++) { s += this.monthVal(mt, y, m); out.push(s); } return out; },
+    big(mt, v) { return v == null ? "–" : eur0.format(v); },
+    val(mt, v) { return v == null ? "–" : eur2.format(v); },
+    cell(mt, v) { return v == null ? "–" : eur2.format(v); },
+    tick(mt, v) { return "€" + minus(nf0.format(v)); },
+    endLabel(mt, v) { return eur0.format(v); },
+    abs(mt, cur, ref) { return signed(cur - ref, eur0); },
+    unit() { return "€ cumulati da gennaio"; },
+    tableTitle(mt) { return `${mt.label}: spesa progressiva mese per mese`; },
+    delta(mt, cur, ref) { if (cur == null || !ref) return null; return { v: (cur - ref) / ref * 100, unit: "%" }; },
+    lag(mt, Y, M) {
+      const late = this.keysOf(mt).map((k) => ({ k, lm: this.lastSvc(k, Y) })).filter((x) => x.lm < M);
+      if (!late.length) return "";
+      const name = (k) => (this.services.find((s) => s.key === k) || { label: k }).label;
+      if (mt.total) return `<div class="lag">Bollette mancanti: ${late.map((x) => name(x.k) + (x.lm ? " (fermo a " + MESI_L[x.lm - 1] + ")" : " (nessuna)")).join(", ")}</div>`;
+      return `<div class="lag">${late[0].lm ? "Ultima bolletta: " + MESI_L[late[0].lm - 1] : "Nessuna bolletta nel " + Y}</div>`;
+    },
+    single(mt, y, m) { return m <= this.lastMonth(y) ? this.monthVal(mt, y, m) : null; }
+  };
+
+  // ——— Vista Gas ———
+  const G_METRICS = [{ key: "smc", label: "Consumo gas", higherIsGood: false }];
+  function sheetDate(v) {
+    if (v instanceof Date) return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()));
+    if (typeof v === "number") return new Date(Math.round((v - 25569) * 86400000));
+    const m = String(v == null ? "" : v).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+    return m ? new Date(Date.UTC(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1])) : null;
+  }
+  const gas = {
+    id: "g", data: {}, year: null, month: null, tbl: "smc", lastRead: null,
+    tableLabel: "Indicatore",
+    note: "I consumi arrivano dalla tab Letture gas. Ogni lettura è attribuita al mese in cui il gas è stato consumato. Dal 2024 le letture sono di fine mese e valgono per quel mese, come nella tab Pivot consumi GAS. Le letture fatte entro il 15 del mese, presenti fino al 2023, valgono per il mese precedente: ad esempio quella del 02/01/2023 vale per dicembre 2022. Per questo nel 2022 e nel 2023 alcuni valori sono spostati di un mese rispetto alla pivot. Se una lettura copre più mesi, il consumo va tutto sull'ultimo. Lo scostamento confronta il consumo cumulato allo stesso mese: in verde se consumi meno, in rosso se consumi di più.",
+    load(rows) {
+      // rows: [data lettura, lettura, consumo]
+      const by = {}; let prev = null, last = null;
+      const list = rows.map((r) => ({ d: sheetDate(r[0]), l: r[1], c: r[2] })).filter((r) => r.d && !isNaN(r.d)).sort((a, b) => a.d - b.d);
+      for (const r of list) {
+        const c = r.c != null && !isNaN(r.c) ? +r.c : prev != null && r.l != null && !isNaN(r.l) ? r.l - prev : null;
+        if (r.l != null && !isNaN(r.l)) prev = +r.l;
+        if (c == null) continue;
+        let y = r.d.getUTCFullYear(), m = r.d.getUTCMonth() + 1;
+        if (r.d.getUTCDate() <= 15) { m -= 1; if (m === 0) { m = 12; y -= 1; } }
+        (by[y] = by[y] || {})[m] = (by[y][m] || 0) + c;
+        last = r.d;
+      }
+      this.data = by; this.lastRead = last;
+    },
+    metrics() { return G_METRICS; },
+    lastMonth(y) { const d = this.data[y]; return d ? Math.max(0, ...Object.keys(d).map(Number)) : 0; },
+    years() { return Object.keys(this.data).map(Number).filter((y) => this.lastMonth(y) > 0 && this.data[y - 1] && this.data[y - 2]).sort((a, b) => b - a); },
+    monthVal(y, m) { return (this.data[y] && this.data[y][m]) || 0; },
+    series(mt, y) { const lm = this.lastMonth(y); const out = []; let s = 0; for (let m = 1; m <= lm; m++) { s += this.monthVal(y, m); out.push(s); } return out; },
+    big(mt, v) { return v == null ? "–" : `${nf0.format(v)}<small>Smc</small>`; },
+    val(mt, v) { return v == null ? "–" : nf0.format(v) + " Smc"; },
+    cell(mt, v) { return v == null ? "–" : nf0.format(v); },
+    tick(mt, v) { return nf0.format(v); },
+    endLabel(mt, v) { return nf0.format(v); },
+    abs(mt, cur, ref) { return signed(cur - ref, nf0) + " Smc"; },
+    unit() { return "Smc cumulati da gennaio, dalle letture del contatore"; },
+    tableTitle() { return "Consumo gas: progressivo mese per mese (Smc)"; },
+    delta(mt, cur, ref) { if (cur == null || !ref) return null; return { v: (cur - ref) / ref * 100, unit: "%" }; },
+    lag() { return this.lastRead ? `<div class="period">Ultima lettura: ${this.lastRead.toLocaleDateString("it-IT", { timeZone: "UTC" })}</div>` : ""; },
+    single(mt, y, m) { return m <= this.lastMonth(y) ? this.monthVal(y, m) : null; }
+  };
+
+  // ——— Vista Costi (luce e gas) ———
+  const C_SVCS = [
+    { k: "L", src: "ENERGIA ELETTRICA", name: "Luce", unit: "kWh", dec: 3 },
+    { k: "G", src: "GAS", name: "Gas", unit: "Smc", dec: 2 }
+  ];
+  const C_METRICS = C_SVCS.flatMap((s) => [
+    { key: s.k + "_tot", svc: s, part: "tot", group: s.name, label: "Costo totale", higherIsGood: false, total: true },
+    { key: s.k + "_fix", svc: s, part: "fix", group: s.name, label: "Quota fissa", higherIsGood: false, split: true },
+    { key: s.k + "_var", svc: s, part: "var", group: s.name, label: "Quota variabile", higherIsGood: false, split: true },
+    { key: s.k + "_unit", svc: s, part: "unit", group: s.name, label: `Costo medio per ${s.unit}`, higherIsGood: false }
+  ]);
+  const ufmt = {};
+  C_SVCS.forEach((s) => { ufmt[s.k] = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: s.dec, maximumFractionDigits: s.dec }); });
+  const costs = {
+    id: "c", data: {}, year: null, month: null, tbl: "L_tot",
+    tableLabel: "Voce", kpiClass: "k4", chartClass: "c4", monthlyAll: true,
+    note: "I costi arrivano dalla tab BOLLETTE, per mese di competenza: luce = ENERGIA ELETTRICA, gas = GAS. Quota fissa e quota variabile sono registrate nel foglio solo dal 2025: per gli anni precedenti il confronto su queste due voci non è disponibile (n.d.), mentre il costo totale si confronta con entrambi gli anni. Se completi le colonne QUOTA FISSA e QUOTA VARIABILE di un anno intero, il confronto compare da solo. Il costo medio è la spesa totale divisa per il consumo indicato in bolletta (kWh prelevati dalla rete per la luce, Smc per il gas), cumulati da gennaio: comprende anche la quota fissa, quindi sale quando consumi poco. Note di credito e conguagli negativi riducono la spesa del mese. In verde se spendi meno, in rosso se spendi di più.",
+    load(rows) {
+      // rows: [anno, mese, servizio, importo, consumo, quota fissa, quota variabile]
+      const d = {};
+      for (const [y, m, s, imp, cons, fx, vr] of rows) {
+        const name = String(s == null ? "" : s).trim().toUpperCase();
+        const svc = C_SVCS.find((x) => x.src === name || x.k === name);
+        if (!svc || !y || !m || imp == null || isNaN(imp)) continue;
+        const Y = ((d[svc.k] = d[svc.k] || {})[y] = d[svc.k][y] || { months: {}, split: true });
+        const r = (Y.months[m] = Y.months[m] || { tot: 0, cons: 0, fix: 0, var: 0 });
+        r.tot += +imp;
+        if (cons != null && !isNaN(cons)) r.cons += +cons;
+        if (fx == null || vr == null || isNaN(fx) || isNaN(vr)) Y.split = false; else { r.fix += +fx; r.var += +vr; }
+      }
+      this.data = d;
+    },
+    metrics() { return C_METRICS; },
+    yr(mt, y) { return this.data[mt.svc.k] && this.data[mt.svc.k][y]; },
+    lastSvc(k, y) { const Y = this.data[k] && this.data[k][y]; return Y ? Math.max(0, ...Object.keys(Y.months).map(Number)) : 0; },
+    lastMonth(y) { return Math.max(0, ...C_SVCS.map((s) => this.lastSvc(s.k, y))); },
+    years() {
+      const all = new Set(); C_SVCS.forEach((s) => Object.keys(this.data[s.k] || {}).forEach((y) => all.add(+y)));
+      return [...all].filter((y) => all.has(y - 1) && all.has(y - 2) && this.lastMonth(y) > 0).sort((a, b) => b - a);
+    },
+    series(mt, y) {
+      const Y = this.yr(mt, y), lm = this.lastMonth(y);
+      if (!Y) return [];
+      if (mt.split && !Y.split) return Array(lm).fill(null);
+      const out = []; let s = 0, c = 0;
+      for (let m = 1; m <= lm; m++) {
+        const r = Y.months[m];
+        if (mt.part === "unit") { if (r) { s += r.tot; c += r.cons; } out.push(c > 0 ? s / c : null); }
+        else { if (r) s += r[mt.part]; out.push(s); }
+      }
+      return out;
+    },
+    single(mt, y, m) {
+      const Y = this.yr(mt, y);
+      if (!Y || m > this.lastMonth(y) || (mt.split && !Y.split)) return null;
+      const r = Y.months[m];
+      if (mt.part === "unit") return r && r.cons > 0 ? r.tot / r.cons : null;
+      return r ? r[mt.part] : 0;
+    },
+    isUnit(mt) { return mt.part === "unit"; },
+    big(mt, v) { return v == null ? "–" : this.isUnit(mt) ? `${ufmt[mt.svc.k].format(v)}<small>/${mt.svc.unit}</small>` : eur0.format(v); },
+    val(mt, v) { return v == null ? "–" : this.isUnit(mt) ? `${ufmt[mt.svc.k].format(v)}/${mt.svc.unit}` : eur2.format(v); },
+    cell(mt, v) { return v == null ? "–" : this.isUnit(mt) ? ufmt[mt.svc.k].format(v) : eur2.format(v); },
+    tick(mt, v) { return "€" + (this.isUnit(mt) ? nf2.format(v) : minus(nf0.format(v))); },
+    endLabel(mt, v) { return this.isUnit(mt) ? ufmt[mt.svc.k].format(v) : eur0.format(v); },
+    abs(mt, cur, ref, ry) { return this.isUnit(mt) ? `${ry}: ${ufmt[mt.svc.k].format(ref)}` : signed(cur - ref, eur0); },
+    na(mt, ry) { const Y = this.yr(mt, ry); return mt.split && Y && !Y.split ? "non registrata" : ""; },
+    unit(mt) {
+      if (this.isUnit(mt)) return `Spesa totale ÷ ${mt.svc.unit} in bolletta, cumulati da gennaio`;
+      return mt.split ? "€ cumulati da gennaio · registrata dal 2025" : "€ cumulati da gennaio";
+    },
+    tableTitle(mt) { return `${mt.group} · ${mt.label}: mese per mese e progressivo`; },
+    delta(mt, cur, ref) { if (cur == null || ref == null || !ref) return null; return { v: (cur - ref) / ref * 100, unit: "%" }; },
+    lag(mt, Y, M) {
+      const lm = this.lastSvc(mt.svc.k, Y);
+      if (lm >= M) return "";
+      return `<div class="lag">${lm ? "Ultima bolletta: " + MESI_L[lm - 1] : "Nessuna bolletta nel " + Y}</div>`;
+    }
+  };
+
+  const VIEWS = { e: energy, b: bills, g: gas, c: costs };
+  const ALL = [energy, bills, gas, costs];
+  const TABS = ["e", "b", "g", "c"];
+  let active = "e";
+
+  // ——— Rendering comune ———
+  const deltaStr = (d) => (d.v >= 0 ? "+" : "−") + nf1.format(Math.abs(d.v)) + d.unit;
+  const tone = (mt, d) => (!d || Math.abs(d.v) < 0.05 ? "flat" : (d.v > 0) === mt.higherIsGood ? "good" : "bad");
+  function chip(V, mt, cur, ref) {
+    const d = V.delta(mt, cur, ref);
+    if (!d) return '<span class="chip flat">n.d.</span>';
+    const t = tone(mt, d);
+    if (t === "flat") return `<span class="chip flat">= 0,0${d.unit}</span>`;
+    return `<span class="chip ${t}" title="${t === "good" ? "favorevole" : "sfavorevole"}">${d.v > 0 ? "▲" : "▼"} ${deltaStr(d)}</span>`;
+  }
+  const legendHtml = (years) => years.map((y, k) => `<span><i class="${k === 2 ? "dash" : ""}" style="border-color:var(--y${k})"></i>${y}${k === 0 ? " (in corso)" : ""}</span>`).join("");
+  const label = (mt) => (mt.group ? mt.group + " · " : "") + mt.label;
+  function niceStep(x) {
+    if (!(x > 0)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(x)));
+    for (const f of [1, 2, 2.5, 5, 10]) if (f * p >= x - 1e-12) return f * p;
+    return 10 * p;
+  }
+  function grouped(V, cell) {
+    let out = "", g = null;
+    V.metrics().forEach((mt, i) => {
+      if (mt.group && mt.group !== g) { g = mt.group; out += `<h3 class="grp">${g}</h3>`; }
+      out += cell(mt, i);
+    });
+    return out;
+  }
+
+  function buildShell(V) {
+    const p = V.id, one = V.metrics().length === 1;
+    $("view-" + p).innerHTML = `
+      <div class="controls">
+        <label for="selYear-${p}">Anno <select id="selYear-${p}"></select></label>
+        <label for="selMonth-${p}">Confronto fino a <select id="selMonth-${p}"></select></label>
+        <span id="cmp-${p}"></span>
+      </div>
+      <p class="sect">Riepilogo</p>
+      <div class="kpis ${one ? "solo" : V.kpiClass || ""}" id="kpis-${p}"></div>
+      <p class="sect">Andamento progressivo</p>
+      <div class="charts ${one ? "solo" : V.chartClass || ""}" id="charts-${p}"></div>
+      <div class="tablebox">
+        <div class="tablehead"><h3 id="tblTitle-${p}"></h3><label for="selTbl-${p}" class="controls"${one ? " hidden" : ""}>${V.tableLabel} <select id="selTbl-${p}"></select></label></div>
+        <div class="tscroll"><table id="tbl-${p}"></table></div>
+      </div>
+      <p class="note">${V.note}</p>`;
+    $("selYear-" + p).addEventListener("change", (e) => { V.year = +e.target.value; V.month = null; fillControls(V, true); render(V); });
+    $("selMonth-" + p).addEventListener("change", (e) => { V.month = +e.target.value; render(V); });
+    $("selTbl-" + p).addEventListener("change", (e) => { V.tbl = e.target.value; renderTable(V); });
+  }
+
+  function fillControls(V, keep) {
+    const p = V.id, ys = V.years();
+    if (!ys.length) return;
+    if (!keep || !ys.includes(V.year)) V.year = ys[0];
+    $("selYear-" + p).innerHTML = ys.map((y) => `<option value="${y}" ${y === V.year ? "selected" : ""}>${y}</option>`).join("");
+    const lm = V.lastMonth(V.year);
+    if (!V.month || V.month > lm || !keep) V.month = lm;
+    $("selMonth-" + p).innerHTML = Array.from({ length: lm }, (_, i) => `<option value="${i + 1}" ${i + 1 === V.month ? "selected" : ""}>${MESI_L[i]}</option>`).join("");
+    if (!V.metrics().some((m) => m.key === V.tbl)) V.tbl = V.metrics()[0].key;
+    $("selTbl-" + p).innerHTML = V.metrics().map((m) => `<option value="${m.key}" ${m.key === V.tbl ? "selected" : ""}>${label(m)}</option>`).join("");
+  }
+
+  function render(V) {
+    const p = V.id, Y = V.year, M = V.month;
+    if (!Y || !M) return;
+    $("cmp-" + p).textContent = `Periodo: gennaio → ${MESI_L[M - 1]} di ogni anno`;
+    $("kpis-" + p).innerHTML = grouped(V, (mt) => {
+      const cur = V.series(mt, Y)[M - 1];
+      const rows = [Y - 1, Y - 2].map((ry) => {
+        const ref = V.series(mt, ry)[M - 1];
+        const abs = ref != null && cur != null ? V.abs(mt, cur, ref, ry) : V.na ? V.na(mt, ry) : "";
+        return `<div class="delta"><span class="vs">vs ${ry}</span>${chip(V, mt, cur, ref)}<span class="abs">${abs}</span></div>`;
+      }).join("");
+      const cls = (mt.total ? " total" : "") + (mt.wide ? " wide" : "");
+      return `<article class="kpi${cls}"><h2>${mt.label}</h2><div class="big">${V.big(mt, cur)}</div><div class="period">${Y}, gennaio → ${MESI_L[M - 1]}</div>${V.extra ? V.extra(mt, Y, M) : ""}${V.lag(mt, Y, M)}<div class="deltas">${rows}</div></article>`;
+    });
+    const years = [Y, Y - 1, Y - 2];
+    $("charts-" + p).innerHTML = grouped(V, (mt, i) => `<article class="chart${mt.wide ? " wide" : ""}"><h3>${mt.label}</h3><p class="unit">${V.unit(mt)}</p><div class="legend">${legendHtml(years)}</div><div class="plot" id="plot-${p}-${i}"></div></article>`);
+    drawAll(V);
+    renderTable(V);
+  }
+
+  function drawAll(V) {
+    if ($("view-" + V.id).hidden || !V.year) return;
+    const years = [V.year, V.year - 1, V.year - 2];
+    V.metrics().forEach((mt, i) => { const el = $(`plot-${V.id}-${i}`); if (el) drawChart(V, el, mt, years); });
+  }
+
+  function drawChart(V, el, mt, years) {
+    const M = V.month;
+    const W = Math.max(260, el.clientWidth || 360), H = Math.round(Math.min(300, Math.max(220, W * 0.62)));
+    const pad = { l: 52, r: 62, t: 12, b: 26 };
+    const series = years.map((y) => V.series(mt, y));
+    const flat = series.flat().filter((v) => v != null);
+    const lo = Math.min(0, ...flat), hi = Math.max(0, ...flat);
+    const step = niceStep(((hi - lo) || 1) / 4);
+    const min = Math.floor(lo / step + 1e-9) * step;
+    let max = Math.ceil(hi / step - 1e-9) * step; if (max <= min) max = min + step;
+    const x = (m) => pad.l + (m - 1) * (W - pad.l - pad.r) / 11;
+    const y = (v) => H - pad.b - (v - min) / (max - min) * (H - pad.t - pad.b);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${label(mt)}: progressivo ${years.join(", ")}">`;
+    const zones = V.zones ? V.zones(mt) : null;
+    if (zones && min < 0 && max > 0) {
+      s += `<rect x="${pad.l}" y="${pad.t}" width="${W - pad.l - pad.r}" height="${y(0) - pad.t}" fill="var(--bad-wash)"/>`;
+      s += `<rect x="${pad.l}" y="${y(0)}" width="${W - pad.l - pad.r}" height="${H - pad.b - y(0)}" fill="var(--good-wash)"/>`;
+      s += `<text class="zone" x="${pad.l + 8}" y="${pad.t + 14}">▲ ${zones[0]}</text>`;
+      s += `<text class="zone" x="${pad.l + 8}" y="${H - pad.b - 8}">▼ ${zones[1]}</text>`;
+    }
+    for (let v = min, n = 0; v <= max + step * 1e-6 && n < 12; v += step, n++) {
+      const yy = y(v), zero = Math.abs(v) < step * 1e-6;
+      s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${yy}" y2="${yy}" stroke="var(--${zero ? (min < 0 ? "zero" : "axis") : "grid"})" stroke-width="${zero && min < 0 ? 1.5 : 1}"/>`;
+      s += `<text x="${pad.l - 6}" y="${yy + 3.5}" text-anchor="end">${V.tick(mt, zero ? 0 : v)}</text>`;
+    }
+    for (let m = 1; m <= 12; m++) s += `<text x="${x(m)}" y="${H - pad.b + 16}" text-anchor="middle">${MESI[m - 1]}</text>`;
+    s += `<line x1="${x(M)}" x2="${x(M)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--axis)" stroke-dasharray="2 3"/>`;
+    for (let k = years.length - 1; k >= 0; k--) {
+      const pts = series[k]; if (!pts.length) continue;
+      let d = "", pen = false;
+      pts.forEach((v, j) => { if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${x(j + 1).toFixed(1)},${y(v).toFixed(1)}`; pen = true; });
+      if (d) s += `<path d="${d}" fill="none" stroke="var(--y${k})" stroke-width="${k === 0 ? 2.75 : 2}" stroke-linejoin="round" stroke-linecap="round" ${k === 2 ? 'stroke-dasharray="5 4"' : ""}/>`;
+      const mm = Math.min(M, pts.length), v = pts[mm - 1];
+      if (v != null) s += `<circle cx="${x(mm)}" cy="${y(v)}" r="${k === 0 ? 4.5 : 3.5}" fill="var(--y${k})" stroke="var(--surface)" stroke-width="2"/>`;
+    }
+    const cur = series[0][M - 1];
+    if (cur != null) s += `<text class="lbl" x="${x(M) + 8}" y="${y(cur) + 4}">${V.endLabel(mt, cur)}</text>`;
+    s += `<line class="xh" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+    s += `<rect x="${pad.l - 10}" y="0" width="${W - pad.l - pad.r + 20}" height="${H}" fill="transparent"/>`;
+    s += `</svg><div class="tip" hidden></div>`;
+    el.innerHTML = s;
+
+    const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), xh = el.querySelector(".xh");
+    function show(evt) {
+      const r = svg.getBoundingClientRect();
+      const px = (evt.clientX - r.left) * W / r.width;
+      const m = Math.max(1, Math.min(12, Math.round((px - pad.l) / ((W - pad.l - pad.r) / 11)) + 1));
+      xh.setAttribute("x1", x(m)); xh.setAttribute("x2", x(m)); xh.setAttribute("visibility", "visible");
+      const vals = series.map((sr) => sr[m - 1]);
+      let h = `<b>Gen → ${MESI_L[m - 1]}</b>`;
+      years.forEach((yy, k) => { h += `<div class="r"><i style="background:var(--y${k})"></i><span>${yy}</span><span>${V.val(mt, vals[k])}</span></div>`; });
+      const parts = [1, 2].map((k) => { const d = V.delta(mt, vals[0], vals[k]); return d ? `vs ${years[k]}: ${deltaStr(d)}` : null; }).filter(Boolean);
+      if (parts.length) h += `<div class="d">${parts.join(" · ")}</div>`;
+      tip.innerHTML = h; tip.hidden = false;
+      const left = (x(m) / W) * r.width; const tw = tip.offsetWidth;
+      tip.style.left = Math.max(0, Math.min(r.width - tw, left + (left > r.width / 2 ? -tw - 12 : 12))) + "px";
+      tip.style.top = "8px";
+    }
+    function hide() { tip.hidden = true; xh.setAttribute("visibility", "hidden"); }
+    svg.addEventListener("pointermove", show);
+    svg.addEventListener("pointerdown", show);
+    svg.addEventListener("pointerleave", hide);
+  }
+
+  function renderTable(V) {
+    const p = V.id, Y = V.year, M = V.month, years = [Y, Y - 1, Y - 2];
+    const mt = V.metrics().find((m) => m.key === V.tbl) || V.metrics()[0];
+    $("tblTitle-" + p).textContent = V.tableTitle(mt);
+    const ser = years.map((y) => V.series(mt, y));
+    const cell = (v0, v1, first) => { const d = V.delta(mt, v0, v1); return d ? `<td class="${tone(mt, d)}${first ? " sep" : ""}">${deltaStr(d)}</td>` : `<td${first ? ' class="sep"' : ""}>–</td>`; };
+    let h;
+    if (V.monthlyAll) {
+      h = `<thead><tr class="hg"><th></th><th class="sep" colspan="3">Nel mese</th><th class="sep" colspan="3">Da gennaio</th><th class="sep" colspan="2">Scostamento da gennaio</th></tr>`;
+      h += `<tr><th>Mese</th>${years.map((y, k) => `<th${k === 0 ? ' class="sep"' : ""}>${y}</th>`).join("")}${years.map((y, k) => `<th${k === 0 ? ' class="sep"' : ""}>${y}</th>`).join("")}<th class="sep">vs ${years[1]}</th><th>vs ${years[2]}</th></tr></thead><tbody>`;
+      for (let m = 1; m <= 12; m++) {
+        const mon = years.map((y) => V.single(mt, y, m)), v = ser.map((s) => s[m - 1]);
+        h += `<tr class="${m === M ? "cut" : ""}"><td>${MESI[m - 1]}</td>${mon.map((x, k) => `<td${k === 0 ? ' class="sep"' : ""}>${V.cell(mt, x)}</td>`).join("")}${v.map((x, k) => `<td${k === 0 ? ' class="sep"' : ""}>${V.cell(mt, x)}</td>`).join("")}${cell(v[0], v[1], true)}${cell(v[0], v[2], false)}</tr>`;
+      }
+    } else {
+      const one = !!V.single;
+      h = `<thead><tr><th>Fino a</th>${one ? `<th class="sep">Mese ${years[0]}</th>` : ""}<th class="sep">${years[0]}</th><th>${years[1]}</th><th>${years[2]}</th><th class="sep">Δ vs ${years[1]}</th><th>Δ vs ${years[2]}</th></tr></thead><tbody>`;
+      for (let m = 1; m <= 12; m++) {
+        const v = ser.map((s) => s[m - 1]);
+        h += `<tr class="${m === M ? "cut" : ""}"><td>${MESI[m - 1]}</td>${one ? `<td class="sep">${V.cell(mt, V.single(mt, Y, m))}</td>` : ""}<td class="sep">${V.cell(mt, v[0])}</td><td>${V.cell(mt, v[1])}</td><td>${V.cell(mt, v[2])}</td>${cell(v[0], v[1], true)}${cell(v[0], v[2], false)}</tr>`;
+      }
+    }
+    $("tbl-" + p).innerHTML = h + "</tbody>";
+  }
+
+  // ——— Selettore delle viste ———
+  function setTab(id, focus) {
+    active = id;
+    TABS.forEach((k) => {
+      const on = k === id;
+      $("tab-" + k).setAttribute("aria-selected", on ? "true" : "false");
+      $("tab-" + k).tabIndex = on ? 0 : -1;
+      $("view-" + k).hidden = !on;
+    });
+    if (focus) $("tab-" + id).focus();
+    drawAll(VIEWS[id]);
+    try { localStorage.setItem("gc-tab", id); } catch (_) {}
+  }
+  TABS.forEach((k) => $("tab-" + k).addEventListener("click", () => setTab(k)));
+  document.querySelector(".tabs").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); const i = TABS.indexOf(active), step = e.key === "ArrowRight" ? 1 : TABS.length - 1; setTab(TABS[(i + step) % TABS.length], true); }
+  });
+
+  let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => drawAll(VIEWS[active]), 150); });
+
+
+  // ——— Avvio ———
+  energy.load(SNAP_E); bills.load(SNAP_B); gas.load(SNAP_G); costs.load(SNAP_C);
+  ALL.forEach((V) => { buildShell(V); fillControls(V, false); });
+  let start = { "#energia": "e", "#bollette": "b", "#gas": "g", "#costi": "c" }[location.hash] || null;
+  if (!start) { try { start = localStorage.getItem("gc-tab"); } catch (_) {} }
+  ALL.forEach((V) => render(V));
+  setTab(TABS.includes(start) ? start : "e");
+})();
+</script>
+
+</body></html>
