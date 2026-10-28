@@ -142,11 +142,12 @@ tr.cut td { background: var(--warn-wash); }
   <header>
     <div>
       <h1>Cruscotto gestione casa</h1>
-      <p class="sub">Valori cumulati da gennaio, anno in corso contro i due anni precedenti. Dati dal foglio <em>GESTIONE CASA 2026</em> su Drive, con la copia salvata nell'app come riserva.</p>
+      <p class="sub">Valori cumulati da gennaio, anno in corso contro i due anni precedenti. Dati dal foglio <em>GESTIONE CASA 2026</em>, con la copia salvata nell'app come riserva.</p>
     </div>
     <div class="status">
       <span class="pill" id="srcPill"><span class="dot"></span><span id="srcText">Copia dei dati al 06/10/2026</span></span>
       <button id="refresh" type="button">Aggiorna dal foglio</button>
+      <button id="address" type="button">Indirizzo</button>
     </div>
   </header>
 
@@ -680,10 +681,13 @@ tr.cut td { background: var(--warn-wash); }
     }
   }
 
-  // Chiamato dal lato Android con il contenuto xlsx del foglio, codificato in base64
-  window.onWorkbookBase64 = function (b64) {
+  // Chiamato dal lato Android con il JSON delle tab del foglio (dallo script Apps Script)
+  window.onSheetJson = function (text) {
     try {
-      const wb = XLSX.read(b64, { type: "base64" });
+      const data = JSON.parse(text);
+      if (data.error) throw { code: "parse", message: "Il foglio ha rifiutato la richiesta: controlla il token nell'indirizzo." };
+      const wb = { Sheets: {} };
+      Object.keys(data).forEach((name) => { if (data[name]) wb.Sheets[name] = XLSX.utils.aoa_to_sheet(data[name]); });
       const problems = [];
       try { energy.load(parseEnergy(wb)); } catch (e) { problems.push("Energia: " + explain(e)); }
       try { bills.load(parseBills(wb)); } catch (e) { problems.push("Bollette: " + explain(e)); }
@@ -711,9 +715,11 @@ tr.cut td { background: var(--warn-wash); }
     if (!window.AndroidBridge) return;
     $("refresh").disabled = true;
     setSource("", "Lettura del foglio in corso…");
-    AndroidBridge.refreshWorkbook();
+    AndroidBridge.refreshSheet();
   });
+  $("address").addEventListener("click", () => { if (window.AndroidBridge) AndroidBridge.changeAddress(); });
   $("refresh").hidden = !window.AndroidBridge;
+  $("address").hidden = !window.AndroidBridge;
 
   // ——— Avvio ———
   energy.load(SNAP_E); bills.load(SNAP_B); gas.load(SNAP_G); costs.load(SNAP_C);
