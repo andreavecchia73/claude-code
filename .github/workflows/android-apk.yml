@@ -21,10 +21,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -1)
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
