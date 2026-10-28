@@ -15,6 +15,17 @@ android {
         versionName = "1.0"
     }
 
+    // Keystore di debug fisso nel progetto: il codice SHA-1 non cambia tra una build e l'altra,
+    // così il client OAuth Android registrato su Google Cloud continua a funzionare.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("cruscotto-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -29,4 +40,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+dependencies {
+    // Login Google e token OAuth per leggere il foglio su Drive (sola lettura)
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 }

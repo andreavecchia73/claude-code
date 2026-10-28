@@ -21,14 +21,26 @@ Da terminale, per generare l'APK di debug:
 
 Requisiti minimi del dispositivo: Android 7.0 (API 24).
 
-## Aggiornare i dati
+## Aggiornare i dati da Drive
 
-I dati sono nelle costanti `SNAP_E`, `SNAP_B`, `SNAP_G`, `SNAP_C` dentro `app/src/main/assets/index.html`, nella sezione *Copie di riserva*. Per aggiornarli:
+Il pulsante **Aggiorna dal foglio** scarica il foglio *GESTIONE CASA 2026* da Google Drive (sola lettura) e ricalcola il cruscotto. Senza rete o senza accesso resta visibile la copia salvata nell'app.
 
-- ricopiare le righe dalle tab CONSUMI ELETTRICI, BOLLETTE, Letture gas e dalla tab di costi nello stesso formato;
-- ricompilare l'app.
+Prima del primo utilizzo va configurato l'accesso Google (una tantum):
 
-Il collegamento diretto a Google Drive presente nella versione web (artefatto) non è incluso: richiede l'accesso al connettore del proprio account e non è disponibile in un'app installata.
+1. Google Cloud Console → crea un progetto (o usane uno esistente).
+2. **API e servizi → Libreria**: abilita **Google Drive API**.
+3. **Schermata di consenso OAuth**: tipo *Esterno*, aggiungi il tuo account Google tra gli *utenti di test*.
+4. **Credenziali → Crea credenziali → ID client OAuth → Android**:
+   - nome pacchetto: `it.novalux.cruscottocasa`
+   - impronta SHA-1 del keystore di debug incluso nel progetto:
+     `21:0A:22:0E:F7:5A:8E:0C:B2:9C:B3:1A:32:E4:24:93:69:D8:45:30`
+5. Installa l'APK, premi **Aggiorna dal foglio** e accedi con lo stesso account Google.
+
+Il foglio resta privato: l'app lo legge con il token del tuo account e non crea link pubblici.
+
+Il keystore `app/cruscotto-debug.keystore` (password `android`) è un keystore di debug per questo progetto personale: non usarlo per pubblicare su Google Play.
+
+Per una versione da pubblicare su Play Store serve una chiave di firma dedicata e un nuovo client OAuth con la sua impronta SHA-1.
 
 ## Struttura
 
@@ -36,7 +48,8 @@ Il collegamento diretto a Google Drive presente nella versione web (artefatto) n
 cruscotto-casa-android/
 ├── app/src/main/
 │   ├── AndroidManifest.xml
-│   ├── assets/index.html          # cruscotto (HTML/CSS/JS, nessuna dipendenza esterna obbligatoria)
+│   ├── assets/index.html          # cruscotto (HTML/CSS/JS)
+│   ├── assets/xlsx.full.min.js    # SheetJS 0.18.5 per leggere il foglio xlsx
 │   ├── java/it/novalux/cruscottocasa/MainActivity.kt
 │   └── res/                       # nome app, icona
 ├── build.gradle.kts / settings.gradle.kts
@@ -45,5 +58,5 @@ cruscotto-casa-android/
 
 ## Note
 
-- Permesso `INTERNET`: serve solo a caricare i font IBM Plex da Google Fonts. Senza rete il cruscotto usa i font di sistema.
+- Permesso `INTERNET`: serve a leggere il foglio da Drive e a caricare i font IBM Plex da Google Fonts. Senza rete il cruscotto usa la copia salvata e i font di sistema.
 - Il tab selezionato viene ricordato in `localStorage`.

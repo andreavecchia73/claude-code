@@ -142,10 +142,11 @@ tr.cut td { background: var(--warn-wash); }
   <header>
     <div>
       <h1>Cruscotto gestione casa</h1>
-      <p class="sub">Valori cumulati da gennaio, anno in corso contro i due anni precedenti. Dati da copia salvata nell'app (foglio <em>GESTIONE CASA 2026</em>), non si aggiornano in automatico.</p>
+      <p class="sub">Valori cumulati da gennaio, anno in corso contro i due anni precedenti. Dati dal foglio <em>GESTIONE CASA 2026</em> su Drive, con la copia salvata nell'app come riserva.</p>
     </div>
     <div class="status">
       <span class="pill" id="srcPill"><span class="dot"></span><span id="srcText">Copia dei dati al 06/10/2026</span></span>
+      <button id="refresh" type="button">Aggiorna dal foglio</button>
     </div>
   </header>
 
@@ -164,6 +165,7 @@ tr.cut td { background: var(--warn-wash); }
   <section class="view" id="view-c" role="tabpanel" aria-labelledby="tab-c" hidden></section>
 </div>
 
+<script src="xlsx.full.min.js"></script>
 <script>
 (function () {
   const FILE_ID = "1dkVhjXs9Vs6jicZNINdsuMqHixoDat_cbIhdY2CqlnE";
@@ -628,6 +630,90 @@ tr.cut td { background: var(--warn-wash); }
 
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => drawAll(VIEWS[active]), 150); });
 
+
+  // ——— Aggiornamento dal foglio (app Android: il file xlsx arriva dal lato nativo in base64) ———
+  function setSource(kind, text) {
+    const p = $("srcPill"); p.classList.remove("live", "warn"); if (kind) p.classList.add(kind);
+    $("srcText").textContent = text;
+  }
+  function showMsg(t) { const m = $("msg"); if (t) { m.textContent = t; m.hidden = false; } else m.hidden = true; }
+
+  const up = (c) => String(c == null ? "" : c).trim().toUpperCase();
+  const num = (v) => (v === null || v === "" ? null : typeof v === "number" ? v : parseFloat(String(v).replace(/[€\s]/g, "").replace(/\./g, "").replace(",", ".")));
+  function sheetRows(wb, name, must) {
+    const ws = wb.Sheets[name];
+    if (!ws) throw { code: "parse", message: `Nel foglio non trovo la tab "${name}".` };
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    const hi = rows.findIndex((r) => r && must.every((n) => r.some((c) => up(c) === n)));
+    if (hi < 0) throw { code: "parse", message: `Nella tab ${name} non trovo le colonne ${must.join(", ")}.` };
+    return { hdr: rows[hi].map(up), rows: rows.slice(hi + 1) };
+  }
+  function parseEnergy(wb) {
+    const { hdr, rows } = sheetRows(wb, "CONSUMI ELETTRICI", ["ANNO", "MESE", "CONSUMO TOT", "PRODOTTO", "IMMESSO"]);
+    const c = (n) => hdr.indexOf(n);
+    const ci = { y: c("ANNO"), m: c("MESE"), c: c("CONSUMO TOT"), p: c("PRODOTTO"), i: c("IMMESSO"), pr: c("TOT PRELEVATO"), ac: c("AUTOCONSUMO") };
+    const opt = (r, k) => (k >= 0 ? num(r[k]) : null);
+    return rows.map((r) => [num(r[ci.y]), num(r[ci.m]), num(r[ci.c]), num(r[ci.p]), num(r[ci.i]), opt(r, ci.pr), opt(r, ci.ac)]).filter((r) => r[0] && r[1] && r[2] != null);
+  }
+  function parseBills(wb) {
+    const { hdr, rows } = sheetRows(wb, "BOLLETTE", ["SERVIZI", "ANNO", "MESE CIFRE", "IMPORTO"]);
+    const ci = { s: hdr.indexOf("SERVIZI"), y: hdr.indexOf("ANNO"), m: hdr.indexOf("MESE CIFRE"), v: hdr.indexOf("IMPORTO") };
+    return rows.map((r) => [num(r[ci.y]), num(r[ci.m]), r[ci.s], num(r[ci.v])]).filter((r) => r[0] && r[1] && r[2] && r[3] != null && !isNaN(r[3]));
+  }
+  function parseCosts(wb) {
+    const { hdr, rows } = sheetRows(wb, "BOLLETTE", ["SERVIZI", "ANNO", "MESE CIFRE", "IMPORTO"]);
+    const f = (pre) => hdr.findIndex((h) => h.startsWith(pre));
+    const ci = { s: hdr.indexOf("SERVIZI"), y: hdr.indexOf("ANNO"), m: hdr.indexOf("MESE CIFRE"), v: hdr.indexOf("IMPORTO"), c: hdr.indexOf("CONSUMI"), fx: f("QUOTA FISSA"), vr: f("QUOTA VARIABILE") };
+    const opt = (r, k) => (k >= 0 ? num(r[k]) : null);
+    return rows.map((r) => [num(r[ci.y]), num(r[ci.m]), r[ci.s], num(r[ci.v]), opt(r, ci.c), opt(r, ci.fx), opt(r, ci.vr)]).filter((r) => r[0] && r[1] && r[2] && r[3] != null && !isNaN(r[3]));
+  }
+  function parseGas(wb) {
+    const { hdr, rows } = sheetRows(wb, "Letture gas", ["DATA LETTURA", "LETTURA"]);
+    const ci = { d: hdr.indexOf("DATA LETTURA"), l: hdr.indexOf("LETTURA"), c: hdr.findIndex((h) => h.startsWith("CONSUMO")) };
+    return rows.map((r) => [r[ci.d], num(r[ci.l]), ci.c >= 0 ? num(r[ci.c]) : null]).filter((r) => r[0] != null && r[0] !== "" && (r[1] != null || r[2] != null));
+  }
+
+  function explain(err) {
+    switch (err && err.code) {
+      case "parse": return err.message;
+      default: return `Non riesco a leggere il foglio${err && err.message ? " (" + err.message + ")" : ""}.`;
+    }
+  }
+
+  // Chiamato dal lato Android con il contenuto xlsx del foglio, codificato in base64
+  window.onWorkbookBase64 = function (b64) {
+    try {
+      const wb = XLSX.read(b64, { type: "base64" });
+      const problems = [];
+      try { energy.load(parseEnergy(wb)); } catch (e) { problems.push("Energia: " + explain(e)); }
+      try { bills.load(parseBills(wb)); } catch (e) { problems.push("Bollette: " + explain(e)); }
+      try { gas.load(parseGas(wb)); } catch (e) { problems.push("Gas: " + explain(e)); }
+      try { costs.load(parseCosts(wb)); } catch (e) { problems.push("Costi: " + explain(e)); }
+      if (problems.length === ALL.length) throw { code: "parse", message: problems.join(" ") };
+      ALL.forEach((V) => { fillControls(V, true); render(V); });
+      const stamp = new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      setSource("live", "Dati dal foglio · " + stamp);
+      showMsg(problems.length ? problems.join(" ") + " Per questa parte vedi la copia salvata." : "");
+    } catch (err) {
+      setSource("warn", "Copia dei dati al " + SNAP_DATE);
+      showMsg(explain(err) + " Intanto vedi la copia salvata.");
+    } finally { $("refresh").disabled = false; }
+  };
+
+  // Chiamato dal lato Android quando il download o l'accesso falliscono
+  window.onWorkbookError = function (message) {
+    setSource("warn", "Copia dei dati al " + SNAP_DATE);
+    showMsg(message + " Intanto vedi la copia salvata.");
+    $("refresh").disabled = false;
+  };
+
+  $("refresh").addEventListener("click", () => {
+    if (!window.AndroidBridge) return;
+    $("refresh").disabled = true;
+    setSource("", "Lettura del foglio in corso…");
+    AndroidBridge.refreshWorkbook();
+  });
+  $("refresh").hidden = !window.AndroidBridge;
 
   // ——— Avvio ———
   energy.load(SNAP_E); bills.load(SNAP_B); gas.load(SNAP_G); costs.load(SNAP_C);
