@@ -313,7 +313,12 @@ tr.cut td { background: var(--warn-wash); }
     const s = String(v == null ? "" : v).trim();
     const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
     if (m) return new Date(Date.UTC(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]));
-    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    // Con orario (es. 2021-07-01T22:00:00.000Z = mezzanotte italiana del 2 luglio): si usa la data locale
+    if (/T\d{2}:\d{2}/.test(s)) {
+      const local = new Date(s);
+      if (!isNaN(local)) return new Date(Date.UTC(local.getFullYear(), local.getMonth(), local.getDate()));
+    }
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
     if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
     if (/^\d{4,5}$/.test(s)) return new Date(Math.round((+s - 25569) * 86400000));
     return null;
@@ -645,7 +650,7 @@ tr.cut td { background: var(--warn-wash); }
   function showMsg(t) { const m = $("msg"); if (t) { m.textContent = t; m.hidden = false; } else m.hidden = true; }
 
   const up = (c) => String(c == null ? "" : c).trim().toUpperCase();
-  const num = (v) => (v === null || v === "" ? null : typeof v === "number" ? v : parseFloat(String(v).replace(/[€\s]/g, "").replace(/\./g, "").replace(",", ".")));
+  const num = (v) => (v === null || v === "" ? null : typeof v === "number" ? v : parseFloat(String(v).replace(/EUR|[€\s]/g, "").replace(/\./g, "").replace(",", ".")));
   function sheetRows(wb, name, must) {
     const ws = wb.Sheets[name];
     if (!ws) throw { code: "parse", message: `Nel foglio non trovo la tab "${name}".` };
