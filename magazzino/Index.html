@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Magazzino</title>
+<style>
+  :root { --bg: #f6f6f4; --fg: #1d1d1b; --muted: #6b6b66; --card: #ffffff; --line: #dcdcd6; --accent: #c8102e; --warn: #b45309; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171716; --fg: #f2f2ee; --muted: #9c9c96; --card: #222220; --line: #3a3a36; --accent: #ff5c6c; --warn: #fbbf24; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 16px 84px; font: 16px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  h1 { font-size: 20px; margin: 16px 0 8px; }
+  h2 { font-size: 17px; margin: 20px 0 8px; }
+  .tab[hidden] { display: none; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--card); border-top: 1px solid var(--line); }
+  nav button { flex: 1; padding: 12px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; }
+  nav button[aria-current="true"] { color: var(--accent); font-weight: 600; }
+  input, select, textarea { width: 100%; padding: 10px; margin: 4px 0 12px; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  label { display: block; font-size: 14px; color: var(--muted); }
+  button.primary, button.secondary { padding: 12px 16px; border-radius: 8px; font: inherit; border: 0; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; width: 100%; }
+  button.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; }
+  ul.elenco { list-style: none; padding: 0; margin: 0; }
+  ul.elenco li { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+  .riga-art { display: block; width: 100%; text-align: left; padding: 12px; background: none; border: 0; color: var(--fg); font: inherit; }
+  small { color: var(--muted); }
+  .warn { color: var(--warn); font-weight: 600; }
+  .riga { display: flex; gap: 8px; align-items: center; }
+  .riga > * { flex: 1; }
+  .qta { display: flex; align-items: center; gap: 12px; }
+  .qta button { width: 52px; height: 52px; font-size: 22px; }
+  .foto { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .foto img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+  #toast { position: fixed; top: 12px; left: 16px; right: 16px; padding: 12px; border-radius: 8px; background: var(--fg); color: var(--bg); display: none; z-index: 9; }
+  #toast.errore { background: var(--accent); color: #fff; }
+  .anteprima { display: flex; flex-wrap: wrap; gap: 0; background: #fff; color: #000; padding: 8px; border: 1px solid var(--line); zoom: .5; width: 210mm; }
+  .etichetta { box-sizing: border-box; width: 40mm; height: 30mm; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .5mm; overflow: hidden; outline: .1mm dashed #999; font: 8pt/1 monospace; }
+  .etichetta img { width: 20mm; height: 20mm; }
+  .sezione-anteprima { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<div id="toast" role="status"></div>
+
+<main>
+  <!-- CERCA -->
+  <section id="tab-cerca" class="tab">
+    <h1>Magazzino</h1>
+    <input id="cerca" type="search" placeholder="Codice, descrizione, specifiche, note">
+    <div class="riga">
+      <select id="filtro-cat" aria-label="Categoria"></select>
+    </div>
+    <label><input id="filtro-scorta" type="checkbox" style="width:auto;margin:0"> Solo sotto scorta</label>
+    <p><small id="conteggio"></small></p>
+    <ul id="lista" class="elenco"></ul>
+  </section>
+
+  <!-- SCANSIONE -->
+  <section id="tab-scansiona" class="tab" hidden>
+    <h1>Scansiona QR</h1>
+    <p><small>Fotografa l'etichetta: il QR viene letto automaticamente.</small></p>
+    <button id="btn-scan" class="primary" type="button">Fotografa etichetta</button>
+    <input id="input-scan" type="file" accept="image/*" capture="environment" hidden>
+    <p id="esito"></p>
+    <h2>Oppure digita il codice</h2>
+    <form id="form-codice">
+      <input id="codice-manuale" placeholder="es. ALM-000042" maxlength="10" autocapitalize="characters">
+      <button class="secondary" type="submit" style="width:100%">Apri</button>
+    </form>
+  </section>
+
+  <!-- NUOVO / MODIFICA -->
+  <section id="tab-nuovo" class="tab" hidden>
+    <h1 id="titolo-form">Nuovo articolo</h1>
+    <form id="form-art">
+      <input id="codice" type="hidden">
+      <label for="f-cat">Categoria *</label>
+      <select id="f-cat" name="categoria" required></select>
+
+      <label for="f-desc">Descrizione *</label>
+      <input id="f-desc" name="descrizione" required>
+
+      <div id="sezione-qta" hidden>
+        <label>Quantità</label>
+        <div class="qta">
+          <button type="button" class="secondary" data-delta="-1">−</button>
+          <strong id="qta-val">0</strong>
+          <button type="button" class="secondary" data-delta="1">+</button>
+        </div>
+      </div>
+      <div id="sezione-qta-nuova">
+        <label for="f-qta">Quantità *</label>
+        <input id="f-qta" name="quantita" type="number" min="0" step="1" required>
+      </div>
+
+      <label for="f-ubi">Ubicazione *</label>
+      <select id="f-ubi" name="ubicazione_id" required></select>
+
+      <label for="f-spec">Specifiche</label>
+      <input id="f-spec" name="specifiche" placeholder="es. 12 V / 2 A">
+
+      <label for="f-stato">Stato</label>
+      <select id="f-stato" name="stato">
+        <option value="">—</option>
+        <option value="nuovo">nuovo</option>
+        <option value="usato">usato</option>
+        <option value="testato">testato</option>
+        <option value="guasto">guasto</option>
+      </select>
+
+      <label for="f-scorta">Scorta minima</label>
+      <input id="f-scorta" name="scorta_minima" type="number" min="0" step="1">
+
+      <label for="f-note">Note</label>
+      <textarea id="f-note" name="note" rows="3"></textarea>
+
+      <button class="primary" type="submit">Salva</button>
+    </form>
+
+    <div id="sezione-foto" hidden>
+      <h2>Foto</h2>
+      <div id="foto" class="foto"></div>
+      <button id="btn-foto" class="secondary" type="button" style="width:100%">Scatta / aggiungi foto</button>
+      <input id="input-foto" type="file" accept="image/*" capture="environment" hidden>
+    </div>
+  </section>
+
+  <!-- ETICHETTE -->
+  <section id="tab-etichette" class="tab" hidden>
+    <h1>Etichette</h1>
+    <label for="et-cat">Categoria</label>
+    <select id="et-cat"></select>
+    <label for="et-da">Primo numero</label>
+    <input id="et-da" type="number" min="1" step="1">
+    <p><small id="et-info"></small></p>
+    <button id="btn-stampa" class="primary" type="button">Stampa foglio</button>
+    <h2>Anteprima</h2>
+    <div class="sezione-anteprima"><div id="anteprima" class="anteprima"></div></div>
+  </section>
+
+  <!-- IMPOSTAZIONI -->
+  <section id="tab-impostazioni" class="tab" hidden>
+    <h1>Impostazioni</h1>
+    <h2>Etichetta (mm)</h2>
+    <form id="form-imp"><div id="campi-imp"></div>
+      <button class="primary" type="submit">Salva impostazioni</button>
+    </form>
+
+    <h2>Categorie</h2>
+    <ul id="lista-cat" class="elenco"></ul>
+    <form id="form-cat">
+      <div class="riga">
+        <div><label for="c-pref">Prefisso (3 lettere)</label><input id="c-pref" maxlength="3" autocapitalize="characters" required></div>
+        <div><label for="c-nome">Nome</label><input id="c-nome" required></div>
+      </div>
+      <button class="secondary" type="submit" style="width:100%">Aggiungi o rinomina</button>
+    </form>
+
+    <h2>Ubicazioni</h2>
+    <ul id="lista-ubi" class="elenco"></ul>
+    <form id="form-ubi">
+      <label for="u-nome">Nome</label>
+      <input id="u-nome" required>
+      <label for="u-parent">Dentro a</label>
+      <select id="u-parent"></select>
+      <button class="secondary" type="submit" style="width:100%">Aggiungi ubicazione</button>
+    </form>
+  </section>
+</main>
+
+<nav>
+  <button type="button" data-tab="cerca" aria-current="true">Cerca</button>
+  <button type="button" data-tab="scansiona">Scansiona</button>
+  <button type="button" data-tab="nuovo">Nuovo</button>
+  <button type="button" data-tab="etichette">Etichette</button>
+  <button type="button" data-tab="impostazioni">Impostazioni</button>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const CAMPI = ['categoria', 'descrizione', 'quantita', 'ubicazione_id', 'specifiche', 'stato', 'scorta_minima', 'note'];
+const CHIAVI_IMP = [
+  ['etichetta_larghezza_mm', 'Larghezza etichetta'],
+  ['etichetta_altezza_mm', 'Altezza etichetta'],
+  ['margine_sinistra_mm', 'Margine sinistro foglio'],
+  ['margine_destra_mm', 'Margine destro foglio'],
+  ['margine_alto_mm', 'Margine superiore foglio'],
+  ['margine_basso_mm', 'Margine inferiore foglio'],
+  ['spazio_colonne_mm', 'Spazio tra colonne'],
+  ['spazio_righe_mm', 'Spazio tra righe'],
+  ['qr_lato_mm', 'Lato QR'],
+];
+
+let dati = { articoli: [], categorie: [], ubicazioni: [], impostazioni: {} };
+let articoloCorrente = null;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function srv(nome, ...args) {
+  return new Promise((ok, ko) => {
+    google.script.run
+      .withSuccessHandler(ok)
+      .withFailureHandler(e => ko(new Error(e && e.message ? e.message : String(e))))
+      [nome](...args);
+  });
+}
+
+function toast(msg, errore) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = errore ? 'errore' : '';
+  t.style.display = 'block';
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => (t.style.display = 'none'), 3000);
+}
+
+function vai(tab) {
+  document.querySelectorAll('.tab').forEach(s => (s.hidden = s.id !== 'tab-' + tab));
+  document.querySelectorAll('nav button').forEach(b => b.setAttribute('aria-current', String(b.dataset.tab === tab)));
+  window.scrollTo(0, 0);
+}
+
+async function ricarica() {
+  dati = await srv('getDati');
+  renderCategorie();
+  renderUbicazioni();
+  renderLista();
+  renderImpostazioni();
+}
+
+function percorso(id) {
+  const u = dati.ubicazioni.find(x => x.id === id);
+  if (!u) return '—';
+  return u.parent_id ? percorso(u.parent_id) + ' › ' + u.nome : u.nome;
+}
+
+function sottoScorta(a) {
+  return a.scorta_minima !== '' && a.scorta_minima != null && Number(a.quantita) < Number(a.scorta_minima);
+}
+
+/* ---------- liste e select ---------- */
+
+function renderCategorie() {
+  const opz = dati.categorie.map(c => `<option value="${esc(c.prefisso)}">${esc(c.prefisso)} · ${esc(c.nome)}</option>`).join('');
+  $('f-cat').innerHTML = '<option value="">—</option>' + opz;
+  $('filtro-cat').innerHTML = '<option value="">Tutte le categorie</option>' + opz;
+  $('et-cat').innerHTML = '<option value="">—</option>' + opz;
+  $('lista-cat').innerHTML = dati.categorie.map(c =>
+    `<li style="padding:10px">${esc(c.prefisso)} · ${esc(c.nome)} <small>ultimo n. ${esc(c.ultimo_numero)}</small></li>`).join('');
+}
+
+function renderUbicazioni() {
+  const opz = dati.ubicazioni.map(u => `<option value="${esc(u.id)}">${esc(percorso(u.id))}</option>`).join('');
+  $('f-ubi').innerHTML = '<option value="">—</option>' + opz;
+  $('u-parent').innerHTML = '<option value="">Radice</option>' + opz;
+  $('lista-ubi').innerHTML = dati.ubicazioni.map(u =>
+    `<li style="padding:10px">${esc(percorso(u.id))}</li>`).join('');
+}
+
+function renderLista() {
+  const q = $('cerca').value.trim().toLowerCase();
+  const cat = $('filtro-cat').value;
+  const soloScorta = $('filtro-scorta').checked;
+  const risultati = dati.articoli.filter(a => {
+    if (cat && a.categoria !== cat) return false;
+    if (soloScorta && !sottoScorta(a)) return false;
+    if (!q) return true;
+    return [a.codice, a.descrizione, a.specifiche, a.note].join(' ').toLowerCase().includes(q);
+  });
+  $('conteggio').textContent = risultati.length + ' articoli';
+  $('lista').innerHTML = risultati.map(a =>
+    `<li><button class="riga-art" type="button" data-codice="${esc(a.codice)}">` +
+    `<strong>${esc(a.codice)}</strong> ${esc(a.descrizione)}<br>` +
+    `<small>${esc(percorso(a.ubicazione_id))} · qtà ${esc(a.quantita)}` +
+    (sottoScorta(a) ? ' · <span class="warn">sotto scorta</span>' : '') + `</small></button></li>`).join('');
+}
+
+function renderImpostazioni() {
+  $('campi-imp').innerHTML = CHIAVI_IMP.map(([chiave, etichetta]) =>
+    `<label for="s-${chiave}">${esc(etichetta)}</label>` +
+    `<input id="s-${chiave}" type="number" step="0.1" min="0" value="${esc(dati.impostazioni[chiave])}">`).join('');
+}
+
+/* ---------- articolo: form, quantità, foto ---------- */
+
+function apriForm(articolo) {
+  articoloCorrente = articolo || null;
+  const f = $('form-art');
+  f.reset();
+  $('titolo-form').textContent = articolo ? 'Modifica ' + articolo.codice : 'Nuovo articolo';
+  $('codice').value = articolo ? articolo.codice : '';
+  for (const c of CAMPI) {
+    if (f.elements[c]) f.elements[c].value = articolo && articolo[c] != null ? articolo[c] : '';
+  }
+  $('f-qta').value = articolo ? articolo.quantita : '';
+  $('sezione-qta').hidden = !articolo;
+  $('sezione-qta-nuova').hidden = !!articolo;
+  $('f-qta').required = !articolo;
+  $('qta-val').textContent = articolo ? articolo.quantita : '';
+  $('sezione-foto').hidden = !articolo;
+  renderFoto(articolo);
+  vai('nuovo');
+}
+
+function renderFoto(a) {
+  if (!a) return;
+  const ids = String(a.foto || '').split(' | ').filter(Boolean);
+  $('foto').innerHTML = ids.map(id =>
+    `<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w300" alt="foto articolo">`).join('');
+  $('btn-foto').disabled = ids.length >= 3;
+  $('btn-foto').textContent = ids.length >= 3 ? 'Massimo 3 foto' : 'Scatta / aggiungi foto';
+}
+
+function ridimensiona(file, lato, qualita) {
+  return new Promise((ok, ko) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scala = Math.min(1, lato / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scala);
+      c.height = Math.round(img.height * scala);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      ok(c.toDataURL('image/jpeg', qualita));
+    };
+    img.onerror = () => ko(new Error('Immagine non leggibile'));
+    img.src = url;
+  });
+}
+
+async function decodificaQr(file) {
+  const dataUrl = await ridimensiona(file, 1280, 0.92);
+  const img = new Image();
+  img.src = dataUrl;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, c.width, c.height);
+  const r = jsQR(px.data, px.width, px.height);
+  return r ? r.data : null;
+}
+
+/* ---------- scansione ---------- */
+
+function trovaEApri(testo) {
+  const codice = String(testo || '').trim().toUpperCase();
+  const a = dati.articoli.find(x => x.codice === codice);
+  if (!a) {
+    $('esito').textContent = codice ? 'Codice ' + codice + ' non presente in magazzino.' : 'Codice vuoto.';
+    return;
+  }
+  $('esito').textContent = '';
+  apriForm(a);
+}
+
+/* ---------- etichette ---------- */
+
+function layout() {
+  const i = dati.impostazioni;
+  const n = k => Number(i[k]);
+  const w = n('etichetta_larghezza_mm'), h = n('etichetta_altezza_mm');
+  const ml = n('margine_sinistra_mm'), mr = n('margine_destra_mm');
+  const mt = n('margine_alto_mm'), mb = n('margine_basso_mm');
+  const sc = n('spazio_colonne_mm'), sr = n('spazio_righe_mm');
+  const colonne = Math.floor((210 - ml - mr + sc) / (w + sc));
+  const righe = Math.floor((297 - mt - mb + sr) / (h + sr));
+  return { w, h, ml, mt, sc, sr, colonne, righe, perFoglio: colonne * righe, lato: n('qr_lato_mm') };
+}
+
+function codiciFoglio(prefisso, da, quanti) {
+  return Array.from({ length: quanti }, (_, k) => prefisso + '-' + String(da + k).padStart(6, '0'));
+}
+
+function qrDataUrl(testo) {
+  const qr = qrcode(0, 'M');
+  qr.addData(testo);
+  qr.make();
+  return qr.createDataURL(8, 0);
+}
+
+function etichetteHtml(codici) {
+  return codici.map(c => `<div class="etichetta"><img src="${qrDataUrl(c)}" alt=""><span>${esc(c)}</span></div>`).join('');
+}
+
+function aggiornaEtichette() {
+  const cat = $('et-cat').value;
+  if (!cat) {
+    $('anteprima').innerHTML = '';
+    $('et-info').textContent = 'Scegli una categoria';
+    return;
+  }
+  const L = layout();
+  const da = Number($('et-da').value) || 1;
+  const codici = codiciFoglio(cat, da, L.perFoglio);
+  $('et-info').textContent = `${L.colonne} x ${L.righe} = ${L.perFoglio} etichette · da ${codici[0]} a ${codici[codici.length - 1]}`;
+  $('anteprima').innerHTML = etichetteHtml(codici);
+}
+
+function stampa() {
+  const cat = $('et-cat').value;
+  if (!cat) return toast('Scegli una categoria', true);
+  const L = layout();
+  const codici = codiciFoglio(cat, Number($('et-da').value) || 1, L.perFoglio);
+  const css = `
+    @page { size: A4; margin: 0 }
+    body { margin: 0 }
+    .foglio { display: grid; grid-template-columns: repeat(${L.colonne}, ${L.w}mm); grid-auto-rows: ${L.h}mm;
+      column-gap: ${L.sc}mm; row-gap: ${L.sr}mm; padding-top: ${L.mt}mm; padding-left: ${L.ml}mm; }
+    .etichetta { box-sizing: border-box; width: ${L.w}mm; height: ${L.h}mm; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: .5mm; overflow: hidden; outline: .1mm dashed #999; font: 8pt/1 monospace; }
+    .etichetta img { width: ${L.lato}mm; height: ${L.lato}mm; }`;
+  const finestra = window.open('', '_blank');
+  if (!finestra) return toast('Consenti i pop-up per stampare', true);
+  finestra.document.write(`<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Etichette ${esc(cat)}</title>` +
+    `<style>${css}</style></head><body><div class="foglio">${etichetteHtml(codici)}</div>` +
+    `<script>window.onload = () => window.print();<\/script></body></html>`);
+  finestra.document.close();
+}
+
+/* ---------- eventi ---------- */
+
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => vai(b.dataset.tab)));
+
+$('cerca').addEventListener('input', renderLista);
+$('filtro-cat').addEventListener('change', renderLista);
+$('filtro-scorta').addEventListener('change', renderLista);
+
+$('lista').addEventListener('click', e => {
+  const btn = e.target.closest('[data-codice]');
+  if (btn) apriForm(dati.articoli.find(a => a.codice === btn.dataset.codice));
+});
+
+document.querySelectorAll('[data-delta]').forEach(b => b.addEventListener('click', async () => {
+  try {
+    const nuova = await srv('aggiornaQuantita', articoloCorrente.codice, Number(b.dataset.delta));
+    articoloCorrente.quantita = nuova;
+    $('qta-val').textContent = nuova;
+    await ricarica();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}));
+
+$('form-art').addEventListener('submit', async e => {
+  e.preventDefault();
+  const f = e.target;
+  const payload = { codice: $('codice').value };
+  for (const c of CAMPI) payload[c] = f.elements[c] ? f.elements[c].value : '';
+  if (articoloCorrente) payload.quantita = articoloCorrente.quantita;
+  else payload.quantita = $('f-qta').value;
+  try {
+    const salvato = await srv('salvaArticolo', payload);
+    toast('Salvato ' + salvato.codice);
+    await ricarica();
+    apriForm(dati.articoli.find(a => a.codice === salvato.codice));
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$('btn-foto').addEventListener('click', () => $('input-foto').click());
+$('input-foto').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file || !articoloCorrente) return;
+  try {
+    toast('Caricamento foto…');
+    const dataUrl = await ridimensiona(file, 1280, 0.8);
+    await srv('caricaFoto', articoloCorrente.codice, dataUrl);
+    await ricarica();
+    apriForm(dati.articoli.find(a => a.codice === articoloCorrente.codice));
+    toast('Foto salvata');
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$('btn-scan').addEventListener('click', () => $('input-scan').click());
+$('input-scan').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('esito').textContent = 'Lettura in corso…';
+  try {
+    const testo = await decodificaQr(file);
+    if (!testo) {
+      $('esito').textContent = 'QR non leggibile: riprova con più luce o digita il codice.';
+      return;
+    }
+    trovaEApri(testo);
+  } catch (err) {
+    $('esito').textContent = err.message;
+  }
+});
+$('form-codice').addEventListener('submit', e => {
+  e.preventDefault();
+  trovaEApri($('codice-manuale').value);
+});
+
+$('et-cat').addEventListener('change', () => {
+  const c = dati.categorie.find(x => x.prefisso === $('et-cat').value);
+  $('et-da').value = c ? Number(c.ultimo_numero) + 1 : '';
+  aggiornaEtichette();
+});
+$('et-da').addEventListener('input', aggiornaEtichette);
+$('btn-stampa').addEventListener('click', stampa);
+
+$('form-imp').addEventListener('submit', async e => {
+  e.preventDefault();
+  const valori = {};
+  CHIAVI_IMP.forEach(([chiave]) => (valori[chiave] = $('s-' + chiave).value));
+  try {
+    dati.impostazioni = await srv('salvaImpostazioni', valori);
+    toast('Impostazioni salvate');
+    aggiornaEtichette();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$('form-cat').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    await srv('salvaCategoria', { prefisso: $('c-pref').value, nome: $('c-nome').value });
+    $('form-cat').reset();
+    toast('Categoria salvata');
+    await ricarica();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+$('form-ubi').addEventListener('submit', async e => {
+  e.preventDefault();
+  try {
+    await srv('salvaUbicazione', { nome: $('u-nome').value, parent_id: $('u-parent').value });
+    $('form-ubi').reset();
+    toast('Ubicazione salvata');
+    await ricarica();
+  } catch (err) {
+    toast(err.message, true);
+  }
+});
+
+ricarica().catch(err => toast(err.message, true));
+</script>
+</body>
+</html>
