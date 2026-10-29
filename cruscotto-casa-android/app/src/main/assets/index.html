@@ -310,8 +310,13 @@ tr.cut td { background: var(--warn-wash); }
   function sheetDate(v) {
     if (v instanceof Date) return new Date(Date.UTC(v.getFullYear(), v.getMonth(), v.getDate()));
     if (typeof v === "number") return new Date(Math.round((v - 25569) * 86400000));
-    const m = String(v == null ? "" : v).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
-    return m ? new Date(Date.UTC(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1])) : null;
+    const s = String(v == null ? "" : v).trim();
+    const m = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+    if (m) return new Date(Date.UTC(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]));
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) return new Date(Date.UTC(+iso[1], +iso[2] - 1, +iso[3]));
+    if (/^\d{4,5}$/.test(s)) return new Date(Math.round((+s - 25569) * 86400000));
+    return null;
   }
   const gas = {
     id: "g", data: {}, year: null, month: null, tbl: "smc", lastRead: null,
@@ -671,7 +676,13 @@ tr.cut td { background: var(--warn-wash); }
   function parseGas(wb) {
     const { hdr, rows } = sheetRows(wb, "Letture gas", ["DATA LETTURA", "LETTURA"]);
     const ci = { d: hdr.indexOf("DATA LETTURA"), l: hdr.indexOf("LETTURA"), c: hdr.findIndex((h) => h.startsWith("CONSUMO")) };
-    return rows.map((r) => [r[ci.d], num(r[ci.l]), ci.c >= 0 ? num(r[ci.c]) : null]).filter((r) => r[0] != null && r[0] !== "" && (r[1] != null || r[2] != null));
+    const usable = rows.map((r) => [r[ci.d], num(r[ci.l]), ci.c >= 0 ? num(r[ci.c]) : null])
+      .filter((r) => r[0] != null && r[0] !== "" && (r[1] != null || r[2] != null));
+    const withDate = usable.filter((r) => { const d = sheetDate(r[0]); return d && !isNaN(d); });
+    if (usable.length && !withDate.length) {
+      throw { code: "parse", message: `Nella tab Letture gas le date non sono riconosciute (esempio: "${usable[0][0]}").` };
+    }
+    return usable;
   }
 
   function explain(err) {
