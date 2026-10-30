@@ -37,6 +37,8 @@ function doGet() {
 
 function inizializza() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) throw new Error('Esegui inizializza() dallo script aperto dal foglio (Estensioni > Apps Script).');
+  PropertiesService.getScriptProperties().setProperty('SS_ID', ss.getId());
   Object.keys(TABELLE).forEach(nome => {
     let foglio = ss.getSheetByName(nome);
     if (!foglio) foglio = ss.insertSheet(nome);
@@ -198,8 +200,11 @@ function assegnaCodice_(prefisso) {
   return prefisso + '-' + String(n).padStart(6, '0');
 }
 
+/** Dalla web app il foglio attivo non esiste: si riapre per ID salvato da inizializza(). */
 function foglioTabella_(nome) {
-  const foglio = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nome);
+  const id = PropertiesService.getScriptProperties().getProperty('SS_ID');
+  if (!id) throw new Error('Foglio non collegato: eseguire inizializza() dall\'editor.');
+  const foglio = SpreadsheetApp.openById(id).getSheetByName(nome);
   if (!foglio) throw new Error('Foglio mancante: ' + nome + '. Eseguire inizializza().');
   return foglio;
 }
