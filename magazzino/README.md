@@ -8,7 +8,18 @@ Web app Google Apps Script con Google Sheets come database. Accessibile da PC e 
 - `Index.html`: interfaccia (cerca, scansione QR da foto, nuovo/modifica, etichette, impostazioni).
 - `appsscript.json`: manifest con accesso limitato al tuo account.
 
-## Installazione
+## Installazione automatica (consigliata)
+
+Con Node.js e `clasp` (`npm install -g @google/clasp`, poi `clasp login`, e l'API Apps Script attiva su https://script.google.com/home/usersettings):
+
+```bash
+cd magazzino
+./setup.sh "Magazzino"
+```
+
+Poi, nel progetto aperto con `clasp open`, esegui una volta `inizializza` e autorizza. Per la configurazione manuale vedi la sezione successiva.
+
+## Installazione manuale
 
 1. Crea un nuovo Google Sheet, ad esempio "Magazzino".
 2. Dal foglio: **Estensioni > Apps Script**.
