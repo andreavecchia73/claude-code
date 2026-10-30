@@ -61,9 +61,13 @@
   <!-- SCANSIONE -->
   <section id="tab-scansiona" class="tab" hidden>
     <h1>Scansiona QR</h1>
-    <p><small>Fotografa l'etichetta: il QR viene letto automaticamente.</small></p>
-    <button id="btn-scan" class="primary" type="button">Fotografa etichetta</button>
-    <input id="input-scan" type="file" accept="image/*" capture="environment" hidden>
+    <p><small>Fotografa l'etichetta oppure scegli una foto dalla galleria: il QR viene letto automaticamente.</small></p>
+    <div class="riga">
+      <button id="btn-scan-cam" class="primary" type="button">Fotografa</button>
+      <button id="btn-scan-gal" class="secondary" type="button">Galleria</button>
+    </div>
+    <input id="input-scan-cam" type="file" accept="image/*" capture="environment" hidden>
+    <input id="input-scan-gal" type="file" accept="image/*" hidden>
     <p id="esito"></p>
     <h2>Oppure digita il codice</h2>
     <form id="form-codice">
@@ -123,8 +127,12 @@
     <div id="sezione-foto" hidden>
       <h2>Foto</h2>
       <div id="foto" class="foto"></div>
-      <button id="btn-foto" class="secondary" type="button" style="width:100%">Scatta / aggiungi foto</button>
-      <input id="input-foto" type="file" accept="image/*" capture="environment" hidden>
+      <div class="riga">
+        <button id="btn-foto-cam" class="secondary" type="button">Scatta</button>
+        <button id="btn-foto-gal" class="secondary" type="button">Galleria</button>
+      </div>
+      <input id="input-foto-cam" type="file" accept="image/*" capture="environment" hidden>
+      <input id="input-foto-gal" type="file" accept="image/*" hidden>
     </div>
   </section>
 
@@ -288,6 +296,7 @@ function renderImpostazioni() {
 
 /* ---------- articolo: form, quantità, foto ---------- */
 
+/** Con articolo apre il form in modifica; con null lo svuota per un nuovo inserimento. */
 function apriForm(articolo) {
   articoloCorrente = articolo || null;
   const f = $('form-art');
@@ -312,8 +321,9 @@ function renderFoto(a) {
   const ids = String(a.foto || '').split(' | ').filter(Boolean);
   $('foto').innerHTML = ids.map(id =>
     `<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(id)}&sz=w300" alt="foto articolo">`).join('');
-  $('btn-foto').disabled = ids.length >= 3;
-  $('btn-foto').textContent = ids.length >= 3 ? 'Massimo 3 foto' : 'Scatta / aggiungi foto';
+  $('btn-foto-cam').disabled = ids.length >= 3;
+  $('btn-foto-gal').disabled = ids.length >= 3;
+  $('btn-foto-cam').textContent = ids.length >= 3 ? 'Massimo 3 foto' : 'Scatta';
 }
 
 function ridimensiona(file, lato, qualita) {
@@ -349,6 +359,35 @@ async function decodificaQr(file) {
   return r ? r.data : null;
 }
 
+/** Collega un input file: alla scelta legge il file e lo passa alla funzione. */
+function alSceglierFile(input, fn) {
+  input.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) await fn(file);
+  });
+}
+
+async function caricaFotoFile(file) {
+  if (!articoloCorrente) return;
+  const codice = articoloCorrente.codice;
+  try {
+    toast('Caricamento foto…');
+    const dataUrl = await ridimensiona(file, 1280, 0.8);
+    await srv('caricaFoto', codice, dataUrl);
+    await ricarica();
+    apriForm(dati.articoli.find(a => a.codice === codice));
+    toast('Foto salvata');
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+alSceglierFile($('input-foto-cam'), caricaFotoFile);
+alSceglierFile($('input-foto-gal'), caricaFotoFile);
+$('btn-foto-cam').addEventListener('click', () => $('input-foto-cam').click());
+$('btn-foto-gal').addEventListener('click', () => $('input-foto-gal').click());
+
 /* ---------- scansione ---------- */
 
 function trovaEApri(testo) {
@@ -361,6 +400,25 @@ function trovaEApri(testo) {
   $('esito').textContent = '';
   apriForm(a);
 }
+
+async function leggiCodiceDaFile(file) {
+  $('esito').textContent = 'Lettura in corso…';
+  try {
+    const testo = await decodificaQr(file);
+    if (!testo) {
+      $('esito').textContent = 'QR non leggibile: riprova con più luce o digita il codice.';
+      return;
+    }
+    trovaEApri(testo);
+  } catch (err) {
+    $('esito').textContent = err.message;
+  }
+}
+
+alSceglierFile($('input-scan-cam'), leggiCodiceDaFile);
+alSceglierFile($('input-scan-gal'), leggiCodiceDaFile);
+$('btn-scan-cam').addEventListener('click', () => $('input-scan-cam').click());
+$('btn-scan-gal').addEventListener('click', () => $('input-scan-gal').click());
 
 /* ---------- etichette ---------- */
 
@@ -453,54 +511,30 @@ document.querySelectorAll('[data-delta]').forEach(b => b.addEventListener('click
 $('form-art').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target;
+  const btnSalva = f.querySelector('button[type="submit"]');
+  const nuovo = !articoloCorrente;
   const payload = { codice: $('codice').value };
   for (const c of CAMPI) payload[c] = f.elements[c] ? f.elements[c].value : '';
   if (articoloCorrente) payload.quantita = articoloCorrente.quantita;
   else payload.quantita = $('f-qta').value;
+  btnSalva.disabled = true;
   try {
     const salvato = await srv('salvaArticolo', payload);
-    toast('Salvato ' + salvato.codice);
     await ricarica();
-    apriForm(dati.articoli.find(a => a.codice === salvato.codice));
-  } catch (err) {
-    toast(err.message, true);
-  }
-});
-
-$('btn-foto').addEventListener('click', () => $('input-foto').click());
-$('input-foto').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file || !articoloCorrente) return;
-  try {
-    toast('Caricamento foto…');
-    const dataUrl = await ridimensiona(file, 1280, 0.8);
-    await srv('caricaFoto', articoloCorrente.codice, dataUrl);
-    await ricarica();
-    apriForm(dati.articoli.find(a => a.codice === articoloCorrente.codice));
-    toast('Foto salvata');
-  } catch (err) {
-    toast(err.message, true);
-  }
-});
-
-$('btn-scan').addEventListener('click', () => $('input-scan').click());
-$('input-scan').addEventListener('change', async e => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
-  $('esito').textContent = 'Lettura in corso…';
-  try {
-    const testo = await decodificaQr(file);
-    if (!testo) {
-      $('esito').textContent = 'QR non leggibile: riprova con più luce o digita il codice.';
-      return;
+    if (nuovo) {
+      apriForm(null);
+      toast('Salvato ' + salvato.codice + ': form pulito');
+    } else {
+      apriForm(dati.articoli.find(a => a.codice === salvato.codice));
+      toast('Salvato ' + salvato.codice);
     }
-    trovaEApri(testo);
   } catch (err) {
-    $('esito').textContent = err.message;
+    toast(err.message, true);
+  } finally {
+    btnSalva.disabled = false;
   }
 });
+
 $('form-codice').addEventListener('submit', e => {
   e.preventDefault();
   trovaEApri($('codice-manuale').value);
