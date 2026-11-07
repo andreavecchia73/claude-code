@@ -698,7 +698,8 @@ tr.cut td { background: var(--warn-wash); }
   }
 
   // Chiamato dal lato Android con il JSON delle tab del foglio (dallo script Apps Script)
-  window.onSheetJson = function (text) {
+  // fromCache: true quando il JSON viene riletto dalla memoria dell'app all'avvio
+  window.onSheetJson = function (text, fromCache) {
     try {
       const data = JSON.parse(text);
       if (data.error) throw { code: "parse", message: "Il foglio ha rifiutato la richiesta: controlla il token nell'indirizzo." };
@@ -711,8 +712,13 @@ tr.cut td { background: var(--warn-wash); }
       try { costs.load(parseCosts(wb)); } catch (e) { problems.push("Costi: " + explain(e)); }
       if (problems.length === ALL.length) throw { code: "parse", message: problems.join(" ") };
       ALL.forEach((V) => { fillControls(V, true); render(V); });
-      const stamp = new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-      setSource("live", "Dati dal foglio · " + stamp);
+      let stamp = null;
+      try { stamp = fromCache ? localStorage.getItem("gc-sheet-when") : null; } catch (_) {}
+      if (!stamp) stamp = new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      if (!fromCache) {
+        try { localStorage.setItem("gc-sheet", text); localStorage.setItem("gc-sheet-when", stamp); } catch (_) {}
+      }
+      setSource("live", (fromCache ? "Ultimo aggiornamento · " : "Dati dal foglio · ") + stamp);
       showMsg(problems.length ? problems.join(" ") + " Per questa parte vedi la copia salvata." : "");
     } catch (err) {
       setSource("warn", "Copia dei dati al " + SNAP_DATE);
@@ -744,6 +750,11 @@ tr.cut td { background: var(--warn-wash); }
   if (!start) { try { start = localStorage.getItem("gc-tab"); } catch (_) {} }
   ALL.forEach((V) => render(V));
   setTab(TABS.includes(start) ? start : "e");
+
+  // Riapertura dell'app: se c'è un aggiornamento salvato, lo si mostra senza richiederlo di nuovo
+  let saved = null;
+  try { saved = localStorage.getItem("gc-sheet"); } catch (_) {}
+  if (saved) window.onSheetJson(saved, true);
 })();
 </script>
 
