@@ -219,6 +219,8 @@ tr.cut td { background: var(--warn-wash); }
       }
       this.data = by;
     },
+    hasData(y, m) { return !!(this.data[y] && this.data[y][m]); },
+    missing(y, m) { return this.hasData(y, m) ? [] : ["consumi elettrici"]; },
     metrics() { return E_METRICS; },
     lastMonth(y) { const ym = this.data[y] || {}; let m = 0; while (ym[m + 1]) m++; return m; },
     years() { return Object.keys(this.data).map(Number).filter((y) => this.lastMonth(y) > 0 && this.data[y - 1] && this.data[y - 2]).sort((a, b) => b - a); },
@@ -276,6 +278,8 @@ tr.cut td { background: var(--warn-wash); }
       this.services = B_KNOWN.filter((x) => seen.has(x.key)).concat([...seen].filter((k) => !B_KNOWN.some((x) => x.key === k)).sort().map((k) => ({ key: k, label: k.charAt(0) + k.slice(1).toLowerCase() })))
         .map((s) => Object.assign({ higherIsGood: false }, s));
     },
+    hasData(y, m) { return this.services.some((s) => this.data[s.key] && this.data[s.key][y] && this.data[s.key][y][m] != null); },
+    missing(y, m) { return this.services.filter((s) => !(this.data[s.key] && this.data[s.key][y] && this.data[s.key][y][m] != null)).map((s) => s.label.toLowerCase()); },
     metrics() { return [B_TOTAL, ...this.services]; },
     keysOf(mt) { return mt.total ? this.services.map((s) => s.key) : [mt.key]; },
     monthVal(mt, y, m) { let s = 0; for (const k of this.keysOf(mt)) { const v = this.data[k] && this.data[k][y] && this.data[k][y][m]; if (v != null) s += v; } return s; },
@@ -342,6 +346,8 @@ tr.cut td { background: var(--warn-wash); }
       }
       this.data = by; this.lastRead = last;
     },
+    hasData(y, m) { return !!(this.data[y] && this.data[y][m] != null); },
+    missing(y, m) { return this.hasData(y, m) ? [] : ["lettura del contatore"]; },
     metrics() { return G_METRICS; },
     lastMonth(y) { const d = this.data[y]; return d ? Math.max(0, ...Object.keys(d).map(Number)) : 0; },
     years() { return Object.keys(this.data).map(Number).filter((y) => this.lastMonth(y) > 0 && this.data[y - 1] && this.data[y - 2]).sort((a, b) => b - a); },
@@ -391,6 +397,12 @@ tr.cut td { background: var(--warn-wash); }
         if (fx == null || vr == null || isNaN(fx) || isNaN(vr)) Y.split = false; else { r.fix += +fx; r.var += +vr; }
       }
       this.data = d;
+    },
+    hasData(y, m) { return C_SVCS.some((s) => { const Y = this.data[s.k] && this.data[s.k][y]; return !!(Y && Y.months[m]); }); },
+    missing(y, m) {
+      const out = C_SVCS.filter((s) => { const Y = this.data[s.k] && this.data[s.k][y]; return !(Y && Y.months[m]); }).map((s) => "bolletta " + s.name.toLowerCase());
+      if (C_SVCS.some((s) => { const Y = this.data[s.k] && this.data[s.k][y]; return Y && !Y.split; })) out.push("quota fissa e variabile (non registrate per quest'anno)");
+      return out;
     },
     metrics() { return C_METRICS; },
     yr(mt, y) { return this.data[mt.svc.k] && this.data[mt.svc.k][y]; },
@@ -480,6 +492,7 @@ tr.cut td { background: var(--warn-wash); }
         <label for="selMonth-${p}">Confronto fino a <select id="selMonth-${p}"></select></label>
         <span id="cmp-${p}"></span>
       </div>
+      <div class="msg" id="miss-${p}" hidden></div>
       <p class="sect">Riepilogo</p>
       <div class="kpis ${one ? "solo" : V.kpiClass || ""}" id="kpis-${p}"></div>
       <p class="sect">Andamento progressivo</p>
@@ -502,18 +515,24 @@ tr.cut td { background: var(--warn-wash); }
     try { localStorage.setItem("gc-month-" + V.id, String(V.month)); } catch (_) {}
   }
 
+  // Mesi dell'anno con almeno un dato compilato
+  function monthsWithData(V, y) {
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => V.hasData(y, m));
+  }
+
   function fillControls(V, keep) {
     const p = V.id, ys = V.years();
     if (!ys.length) return;
     if (!keep || !ys.includes(V.year)) V.year = ys[0];
     $("selYear-" + p).innerHTML = ys.map((y) => `<option value="${y}" ${y === V.year ? "selected" : ""}>${y}</option>`).join("");
-    const lm = V.lastMonth(V.year);
-    // Mese di default: l'ultimo scelto dall'utente, se è ancora disponibile; altrimenti l'ultimo con dati
-    if (!V.month || V.month > lm || !keep) {
+    const months = monthsWithData(V, V.year);
+    const lm = months.length ? months[months.length - 1] : 0;
+    // Mese di default: l'ultimo scelto dall'utente (ricordato), se ha dati; altrimenti l'ultimo disponibile
+    if (!months.includes(V.month) || !keep) {
       const saved = loadMonth(V);
-      V.month = saved && saved <= lm ? saved : lm;
+      V.month = months.includes(saved) ? saved : lm;
     }
-    $("selMonth-" + p).innerHTML = Array.from({ length: lm }, (_, i) => `<option value="${i + 1}" ${i + 1 === V.month ? "selected" : ""}>${MESI_L[i]}</option>`).join("");
+    $("selMonth-" + p).innerHTML = months.map((m) => `<option value="${m}" ${m === V.month ? "selected" : ""}>${MESI_L[m - 1]}</option>`).join("");
     if (!V.metrics().some((m) => m.key === V.tbl)) V.tbl = V.metrics()[0].key;
     $("selTbl-" + p).innerHTML = V.metrics().map((m) => `<option value="${m.key}" ${m.key === V.tbl ? "selected" : ""}>${label(m)}</option>`).join("");
   }
@@ -522,6 +541,9 @@ tr.cut td { background: var(--warn-wash); }
     const p = V.id, Y = V.year, M = V.month;
     if (!Y || !M) return;
     $("cmp-" + p).textContent = `Periodo: gennaio → ${MESI_L[M - 1]} di ogni anno`;
+    const miss = V.missing(Y, M);
+    $("miss-" + p).textContent = miss.length ? `Nel mese di ${MESI_L[M - 1]} mancano: ${miss.join(", ")}.` : "";
+    $("miss-" + p).hidden = !miss.length;
     $("kpis-" + p).innerHTML = grouped(V, (mt) => {
       const cur = V.series(mt, Y)[M - 1];
       const rows = [Y - 1, Y - 2].map((ry) => {
@@ -723,7 +745,8 @@ tr.cut td { background: var(--warn-wash); }
       try { gas.load(parseGas(wb)); } catch (e) { problems.push("Gas: " + explain(e)); }
       try { costs.load(parseCosts(wb)); } catch (e) { problems.push("Costi: " + explain(e)); }
       if (problems.length === ALL.length) throw { code: "parse", message: problems.join(" ") };
-      ALL.forEach((V) => { fillControls(V, true); render(V); });
+      // Dopo un caricamento il mese torna all'ultimo scelto (ricordato) o all'ultimo disponibile
+      ALL.forEach((V) => { V.month = null; fillControls(V, true); render(V); });
       let stamp = null;
       try { stamp = fromCache ? localStorage.getItem("gc-sheet-when") : null; } catch (_) {}
       if (!stamp) stamp = new Date().toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
