@@ -490,8 +490,16 @@ tr.cut td { background: var(--warn-wash); }
       </div>
       <p class="note">${V.note}</p>`;
     $("selYear-" + p).addEventListener("change", (e) => { V.year = +e.target.value; V.month = null; fillControls(V, true); render(V); });
-    $("selMonth-" + p).addEventListener("change", (e) => { V.month = +e.target.value; render(V); });
+    $("selMonth-" + p).addEventListener("change", (e) => { V.month = +e.target.value; saveMonth(V); render(V); });
     $("selTbl-" + p).addEventListener("change", (e) => { V.tbl = e.target.value; renderTable(V); });
+  }
+
+  // Ultimo mese scelto per ogni cruscotto, ricordato tra un'apertura e l'altra
+  function loadMonth(V) {
+    try { return +localStorage.getItem("gc-month-" + V.id) || null; } catch (_) { return null; }
+  }
+  function saveMonth(V) {
+    try { localStorage.setItem("gc-month-" + V.id, String(V.month)); } catch (_) {}
   }
 
   function fillControls(V, keep) {
@@ -500,7 +508,11 @@ tr.cut td { background: var(--warn-wash); }
     if (!keep || !ys.includes(V.year)) V.year = ys[0];
     $("selYear-" + p).innerHTML = ys.map((y) => `<option value="${y}" ${y === V.year ? "selected" : ""}>${y}</option>`).join("");
     const lm = V.lastMonth(V.year);
-    if (!V.month || V.month > lm || !keep) V.month = lm;
+    // Mese di default: l'ultimo scelto dall'utente, se è ancora disponibile; altrimenti l'ultimo con dati
+    if (!V.month || V.month > lm || !keep) {
+      const saved = loadMonth(V);
+      V.month = saved && saved <= lm ? saved : lm;
+    }
     $("selMonth-" + p).innerHTML = Array.from({ length: lm }, (_, i) => `<option value="${i + 1}" ${i + 1 === V.month ? "selected" : ""}>${MESI_L[i]}</option>`).join("");
     if (!V.metrics().some((m) => m.key === V.tbl)) V.tbl = V.metrics()[0].key;
     $("selTbl-" + p).innerHTML = V.metrics().map((m) => `<option value="${m.key}" ${m.key === V.tbl ? "selected" : ""}>${label(m)}</option>`).join("");
